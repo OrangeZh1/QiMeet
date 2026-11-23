@@ -12,7 +12,7 @@ export async function imageMaterialPreview(id: string, preview: MaterialPreview,
     let payload: Buffer
     try {
       const image = sharp(picture, { limitInputPixels: 20_000_000, autoOrient: true })
-      if (preview === 'display' && ((await image.metadata()).pages ?? 1) > 1) return undefined
+      if (preview !== 'thumb' && ((await image.metadata()).pages ?? 1) > 1) return undefined
       payload = await image.resize(size, size, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toBuffer()
     } catch {
       return undefined

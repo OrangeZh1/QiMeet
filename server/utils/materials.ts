@@ -86,7 +86,7 @@ function videoRange(value: string, length: number) {
 export async function materialContent(event: RequestEvent, id: string, publishedOnly: boolean, download = false) {
   if (!uuidPattern.test(id)) fail(404, '找不到该素材')
   const requested = getQuery(event).preview
-  const preview = !download && (requested === 'thumb' || requested === 'display') ? requested : undefined
+  const preview = !download && (requested === 'thumb' || requested === 'card' || requested === 'display') ? requested : undefined
   const projection = preview ? 'COALESCE(v.payload,m.payload) AS payload,v.material_id IS NOT NULL AS hasPreview' : 'm.payload,0 AS hasPreview'
   const material = await first<{ name: string, kind: MaterialKind, mime: string, digest: string, payload: Buffer, hasPreview: number }>(
     'SELECT m.name,m.kind,m.mime,m.digest,' + projection + ' FROM materials m ' +

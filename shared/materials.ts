@@ -1,7 +1,7 @@
 export const materialKinds = ['image', 'file', 'video'] as const
 export type MaterialKind = typeof materialKinds[number]
 
-export const materialPreviewSizes = { thumb: 320, display: 1440 } as const
+export const materialPreviewSizes = { thumb: 320, card: 768, display: 1440 } as const
 export type MaterialPreview = keyof typeof materialPreviewSizes
 
 export function materialImagePreviewUrl(url: string, preview: MaterialPreview = 'thumb') {

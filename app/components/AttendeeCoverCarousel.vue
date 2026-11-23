@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { materialImagePreviewUrl } from '#shared/materials'
+import { materialImagePreviewUrl, type MaterialPreview } from '#shared/materials'
 
 const props = withDefaults(defineProps<{
-  images: { id: string, url: string, title?: string, subtitle?: string }[], label?: string, fallbackUrl?: string,
-}>(), { label: '活动封面' })
+  images: { id: string, url: string, title?: string, subtitle?: string }[], label?: string, fallbackUrl?: string, preview?: MaterialPreview,
+}>(), { label: '活动封面', preview: 'display' })
 const track = ref<HTMLElement>()
 const active = ref(0)
+const shown = shallowReactive(new Set<number>([0]))
 const engaged = ref(false)
 const hovering = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
@@ -13,12 +14,15 @@ let preference: MediaQueryList | undefined
 
 function sync() {
   const element = track.value
-  if (element?.clientWidth) active.value = Math.max(0, Math.min(props.images.length - 1, Math.round(element.scrollLeft / element.clientWidth)))
+  if (!element?.clientWidth) return
+  active.value = Math.max(0, Math.min(props.images.length - 1, Math.round(element.scrollLeft / element.clientWidth)))
+  shown.add(active.value)
 }
 
 function slide(index: number, smooth = true) {
   const element = track.value
   if (!element) return
+  shown.add(index)
   element.scrollTo({ left: index * element.clientWidth, behavior: smooth && !preference?.matches ? 'smooth' : 'auto' })
 }
 
@@ -65,8 +69,8 @@ onBeforeUnmount(() => clearInterval(timer))
       @scroll.passive="sync" @keydown.left.prevent="move(-1)" @keydown.right.prevent="move(1)">
       <div v-for="(image, index) in images" :key="image.id + image.url" class="attendee-cover-slide"
         :aria-hidden="images.length > 1 && index !== active ? 'true' : undefined">
-        <img :src="materialImagePreviewUrl(image.url, 'display')" alt="" :loading="index === 0 ? 'eager' : 'lazy'" :fetchpriority="index === 0 ? 'high' : 'auto'"
-          referrerpolicy="no-referrer" draggable="false" @error="loadFallback" />
+        <img v-if="shown.has(index)" :src="materialImagePreviewUrl(image.url, preview)" alt="" :fetchpriority="index === 0 ? 'high' : 'auto'"
+          decoding="async" referrerpolicy="no-referrer" draggable="false" @error="loadFallback" />
         <slot name="slide" :image="image" />
       </div>
     </div>

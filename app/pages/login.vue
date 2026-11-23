@@ -28,7 +28,8 @@ const otherLabel = computed(() => intent.value === 'login' ? '立即注册' : '�
 const contactMethods = computed(() => ([
   { kind: 'phone', label: '手机号' }, { kind: 'email', label: '邮箱' },
 ] as const).filter(method => session.value?.[method.kind] !== false))
-const kind = ref<ContactKind>(contactMethods.value[0]?.kind ?? 'phone')
+const registerKind = ref<ContactKind>(contactMethods.value[0]?.kind ?? 'phone')
+const credentialMethods = [{ value: 'password', label: '账号登录' }, { value: 'code', label: '验证码登录' }] as const
 const credentialMethod = ref<'password' | 'code'>('password')
 const usingCode = computed(() => intent.value === 'register' || credentialMethod.value === 'code')
 const usingPassword = computed(() => intent.value === 'register' || credentialMethod.value === 'password')
@@ -45,7 +46,10 @@ const notice = ref('')
 const cooldown = ref(0)
 let timer: ReturnType<typeof setInterval> | undefined
 const heading = computed(() => intent.value === 'login' ? '登录' : '注册')
-const identifierLabel = computed(() => kind.value === 'phone' ? '手机号' : '邮箱')
+const combinedLogin = computed(() => intent.value === 'login' && contactMethods.value.length > 1)
+const kind = computed<ContactKind>(() => intent.value === 'register' ? registerKind.value
+  : combinedLogin.value ? (identifier.value.includes('@') ? 'email' : 'phone') : contactMethods.value[0]?.kind ?? 'phone')
+const identifierLabel = computed(() => combinedLogin.value ? '手机号或邮箱' : kind.value === 'phone' ? '手机号' : '邮箱')
 const actionContext = computed(() => {
   const path = next.value.split('?')[0]
   if (path?.endsWith('/check-in')) return '登录后继续签到。'
@@ -73,17 +77,21 @@ function resetCredentials() {
   password.value = passwordAgain.value = ''
 }
 
-watch(intent, resetCredentials)
+watch(intent, () => {
+  identifier.value = ''
+  resetCredentials()
+})
 
 function setKind(value: ContactKind) {
-  if (kind.value === value) return
-  kind.value = value
+  if (registerKind.value === value) return
+  registerKind.value = value
   identifier.value = ''
   resetCredentials()
 }
 
-function toggleCredentialMethod() {
-  credentialMethod.value = credentialMethod.value === 'password' ? 'code' : 'password'
+function setCredentialMethod(method: typeof credentialMethod.value) {
+  if (credentialMethod.value === method) return
+  credentialMethod.value = method
   resetCredentials()
 }
 
@@ -175,7 +183,11 @@ onBeforeUnmount(() => clearInterval(timer))
             <span>演示二维码，扫码不会登录。</span>
           </figcaption>
         </figure>
-        <div v-if="!wechatMode && contactMethods.length > 1" class="client-auth-methods" role="group" aria-label="登录账号类型">
+        <div v-if="!wechatMode && intent === 'login' && contactMethods.length" class="client-auth-methods" role="group" aria-label="登录方式">
+          <button v-for="method in credentialMethods" :key="method.value" type="button" :aria-pressed="credentialMethod === method.value"
+            :disabled="sending || verifying" @click="setCredentialMethod(method.value)">{{ method.label }}</button>
+        </div>
+        <div v-else-if="!wechatMode && intent === 'register' && contactMethods.length > 1" class="client-auth-methods" role="group" aria-label="注册账号类型">
           <button v-for="method in contactMethods" :key="method.kind" type="button" :aria-pressed="kind === method.kind"
             :disabled="sending || verifying" @click="setKind(method.kind)">{{ method.label }}</button>
         </div>
@@ -189,16 +201,13 @@ onBeforeUnmount(() => clearInterval(timer))
           <template v-else>
             <label for="client-identifier">{{ identifierLabel }}</label>
             <div class="entry-input">
-              <UIcon :name="kind === 'phone' ? 'i-lucide-smartphone' : 'i-lucide-mail'" aria-hidden="true" />
-              <input id="client-identifier" v-model.trim="identifier" :type="kind === 'phone' ? 'tel' : 'email'"
-                :autocomplete="kind === 'phone' ? 'tel' : 'email'" :maxlength="kind === 'phone' ? 16 : 254"
+              <UIcon :name="combinedLogin ? 'i-lucide-user-round' : kind === 'phone' ? 'i-lucide-smartphone' : 'i-lucide-mail'" aria-hidden="true" />
+              <input id="client-identifier" v-model.trim="identifier" :type="combinedLogin ? 'text' : kind === 'phone' ? 'tel' : 'email'"
+                :autocomplete="intent === 'login' ? 'username' : kind === 'phone' ? 'tel' : 'email'" :maxlength="combinedLogin || kind === 'email' ? 254 : 16"
+                autocapitalize="none" :spellcheck="false"
                 :placeholder="'请输入' + identifierLabel" :readonly="sending || verifying" required @input="resetCode" />
             </div>
-            <div v-if="intent === 'login'" class="client-auth-field-heading">
-              <label :for="usingCode ? 'client-code' : 'client-password'">{{ usingCode ? '验证码' : '密码' }}</label>
-              <button type="button" :disabled="sending || verifying" @click="toggleCredentialMethod">{{ usingCode ? '密码登录' : '验证码登录' }}</button>
-            </div>
-            <label v-else for="client-code">验证码</label>
+            <label v-if="usingCode" for="client-code">验证码</label>
             <div v-if="usingCode" class="entry-input">
               <UIcon name="i-lucide-shield-check" aria-hidden="true" />
               <input id="client-code" v-model.trim="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码"
@@ -209,7 +218,7 @@ onBeforeUnmount(() => clearInterval(timer))
               </UButton>
             </div>
             <template v-if="usingPassword">
-              <label v-if="intent === 'register'" for="client-password">设置密码</label>
+              <label for="client-password">{{ intent === 'register' ? '设置密码' : '密码' }}</label>
               <div class="entry-input">
                 <UIcon name="i-lucide-lock-keyhole" aria-hidden="true" />
                 <input id="client-password" v-model="password" type="password"
@@ -296,8 +305,6 @@ onBeforeUnmount(() => clearInterval(timer))
 .client-auth-form { display: grid; gap: 7px; }
 .client-auth-form label { font-size: 14px; font-weight: 650; }
 .client-auth-heading + .client-auth-form, .client-auth-context + .client-auth-form { margin-top: 14px; }
-.client-auth-field-heading { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; gap: 6px; }
-.client-auth-field-heading button { min-height: 27px; color: var(--attendee-form-blue); font-size: 13px; font-weight: 620; }
 /* Input layout adapted from QiCore CoreLogin.vue. See NOTICE-QICORE. */
 .entry-input { display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 0 11px; border: 1px solid #e6ecf5; border-radius: 8px; background: #f5f7fb; color: #526889; }
 .entry-input:focus-within { box-shadow: 0 0 0 2px #c6d9ff; border-color: #5085ed; }

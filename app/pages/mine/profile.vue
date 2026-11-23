@@ -151,10 +151,8 @@ async function logout() {
   quitting.value = true
   logoutError.value = ''
   try {
-    await $fetch('/api/account/logout', { method: 'POST' })
-    logoutOpen.value = false
-    clearNuxtData(key => key.startsWith('attendee-'))
-    await navigateTo('/mine')
+    await $fetch('/api/account/logout', { method: 'POST', timeout: 15000 })
+    await navigateTo('/mine', { external: true, replace: true })
   } catch (cause) {
     logoutError.value = errorText(cause, '退出登录失败')
   } finally {
@@ -260,10 +258,10 @@ async function logout() {
           <UButton type="submit" class="profile-action" :loading="passwordBusy">保存密码</UButton>
         </form>
         <UModal v-model:open="logoutOpen" title="退出登录？" description="重新登录后可继续查看个人资料和报名记录。"
-          :dismissible="!quitting" :close="!quitting" :ui="{ overlay: 'z-[60]', content: 'z-[60]' }">
+          :dismissible="!quitting" :close="!quitting" :ui="{ overlay: 'z-[60]', content: 'z-[60]', footer: 'flex-col items-stretch' }">
           <template #footer>
             <p v-if="logoutError" class="attendee-error" role="alert">{{ logoutError }}</p>
-            <div class="attendee-actions">
+            <div class="attendee-actions justify-end">
               <UButton type="button" variant="outline" color="neutral" :disabled="quitting" @click="logoutOpen = false">取消</UButton>
               <UButton type="button" color="error" :loading="quitting" @click="logout">确认退出</UButton>
             </div>

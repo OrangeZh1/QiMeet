@@ -10,7 +10,7 @@ const site = computed(() => settings.value || fallbackSite)
 const featured = computed(() => items.value?.[0])
 const more = computed(() => items.value?.slice(1) || [])
 const brokenFeaturedCover = ref('')
-const featuredCover = computed(() => materialImagePreviewUrl(featured.value?.coverUrl || '', 'display'))
+const featuredCover = computed(() => materialImagePreviewUrl(featured.value?.coverUrl || '', 'card'))
 const featuredImage = ref<HTMLImageElement>()
 onMounted(() => {
   if (featuredImage.value?.complete && !featuredImage.value.naturalWidth) brokenFeaturedCover.value = featuredCover.value
@@ -20,7 +20,7 @@ onMounted(() => {
 <template>
   <NuxtLayout name="attendee" navigation dock-copyright>
     <section class="platform-banner" aria-label="QiMeet 活动首页">
-      <AttendeeCoverCarousel :images="site.homeBanners" fallback-url="/brand/venue-login.jpg" label="首页 Banner">
+      <AttendeeCoverCarousel :images="site.homeBanners" preview="card" fallback-url="/brand/venue-login.jpg" label="首页 Banner">
         <template #slide="{ image }">
           <div v-if="image.title || image.subtitle" class="platform-brand">
             <strong v-if="image.title">{{ image.title }}</strong>
@@ -35,7 +35,7 @@ onMounted(() => {
       <template v-else-if="featured">
         <NuxtLink class="featured-activity" :to="attendeePath(featured.slug)">
           <img v-if="featuredCover && featuredCover !== brokenFeaturedCover" ref="featuredImage" class="featured-cover" :src="featuredCover"
-            alt="" draggable="false" @error="brokenFeaturedCover = featuredCover" />
+            alt="" width="768" height="384" decoding="async" draggable="false" @error="brokenFeaturedCover = featuredCover" />
           <div class="featured-content">
             <div class="featured-title">
               <h2>{{ featured.title }}</h2>
