@@ -9,20 +9,19 @@ const [{ data: items, error }, { data: activities, error: activitiesError }] = a
 ])
 const signedOut = computed(() => attendeeErrorStatus(error.value) === 401)
 const recent = computed(() => activities.value?.slice(0, 2) || [])
-const { search, filtered } = useAttendeeActivitySearch(items)
+const { search, query, filtered } = useAttendeeActivitySearch(items)
 </script>
 
 <template>
   <NuxtLayout name="attendee" navigation toolbar-title="我的报名">
     <section class="client-section">
       <h1 class="sr-only">我的报名</h1>
+      <UInput v-model="search" type="search" icon="i-lucide-search" aria-label="搜索我的报名"
+        :disabled="!!error" :placeholder="signedOut ? '登录后搜索我的报名' : '搜索活动名称或地点'" />
       <AttendeeLoginPrompt v-if="signedOut" next="/mine/registrations" message="登录后查看报名与签到记录。" />
       <p v-else-if="error" class="attendee-error" role="alert">{{ errorText(error, '暂时无法加载报名记录') }}</p>
-      <template v-else-if="items?.length">
-        <UInput v-model="search" type="search" icon="i-lucide-search" aria-label="搜索我的报名" placeholder="搜索活动名称或地点" />
-        <AttendeeActivityList v-if="filtered.length" :items="filtered" />
-        <p v-else class="attendee-helper">没有匹配的报名记录</p>
-      </template>
+      <AttendeeActivityList v-else-if="filtered.length" :items="filtered" />
+      <p v-else-if="query" class="attendee-helper">没有匹配的报名记录</p>
       <div v-else class="registrations-empty">
         <span><UIcon name="i-lucide-ticket" aria-hidden="true" /></span>
         <h2>暂无报名记录</h2>

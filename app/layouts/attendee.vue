@@ -18,7 +18,6 @@ const navigationItems = [
   { to: '/mine', label: '我的', icon: 'i-lucide-user-round' },
 ]
 const activeItem = computed(() => {
-  if (onRecord.value && route.query.recover === '1') return '/mine'
   if (route.path === '/mine/registrations' || onRecord.value) return '/mine/registrations'
   if (route.path === '/mine' || route.path.startsWith('/mine/') || route.path === '/login') return '/mine'
   return '/activities'

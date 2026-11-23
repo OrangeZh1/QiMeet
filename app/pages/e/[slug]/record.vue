@@ -53,7 +53,7 @@ const attachmentLink = (id: string) => attendeeApi(slug, 'attachment') + '?id=' 
 </script>
 
 <template>
-  <NuxtLayout name="attendee" :toolbar-title="pageLabel" :back="recovering ? { to: '/mine/recover', label: '活动列表' } : undefined" navigation>
+  <NuxtLayout name="attendee" :toolbar-title="pageLabel" :back="recovering ? { to: '/mine/recover', label: '活动列表' } : undefined" :navigation="!recovering">
     <div class="record-screen">
       <AttendeeUnavailable
         v-if="!event" class="record-unavailable" title="活动暂不可查看"
