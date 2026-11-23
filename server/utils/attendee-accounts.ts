@@ -1,6 +1,6 @@
 import type { PoolConnection } from 'mysql2/promise'
 import { randomBytes, randomInt } from 'node:crypto'
-import { accountCookie, adminUserDefaultPageSize, adminUserPageSizes, attendeeContactPhone, attendeePasswordMin, attendeePasswordMax, type AccountIntent, type AdminUserPage, type AttendeeAccount, type AttendeeProfile, type ContactKind } from '#shared/attendee-account'
+import { accountCookie, adminUserDefaultPageSize, adminUserPageSizes, attendeeContactPhone, attendeePasswordMin, attendeePasswordMax, detectAttendeeContact, type AccountIntent, type AdminUserPage, type AttendeeAccount, type AttendeeProfile, type ContactKind } from '#shared/attendee-account'
 import type { RequestEvent } from './security'
 
 type AccountRow = { id: number, kind: AttendeeAccount['kind'], identifier: string }
@@ -218,14 +218,9 @@ export async function logoutAttendee(event: RequestEvent) {
 }
 
 export function contactIdentifier(kind: ContactKind, input: unknown) {
-  const value = text(input, 254, kind === 'email' ? '邮箱' : '手机号').toLowerCase()
-  if (kind === 'email') {
-    if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i.test(value)) fail(400, '请输入有效的邮箱地址')
-    return value
-  }
-  const number = value.replace(/^\+86\s*/, '')
-  if (!/^1[3-9]\d{9}$/.test(number)) fail(400, '请输入有效的中国大陆手机号')
-  return number
+  const contact = detectAttendeeContact(text(input, 254, kind === 'email' ? '邮箱' : '手机号'))
+  if (contact?.kind !== kind) fail(400, kind === 'email' ? '请输入有效的邮箱地址' : '请输入有效的中国大陆手机号')
+  return contact.identifier
 }
 
 type CodePurpose = AccountIntent | `profile:${number}:${string}`

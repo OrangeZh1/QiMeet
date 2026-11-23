@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { attendeeLoginFallback, attendeeReturn, isPublicAttendeeHistory, attendeePasswordMin, attendeePasswordMax, type AccountIntent, type AttendeeAuth, type ContactKind } from '#shared/attendee-account'
+import { attendeeLoginFallback, attendeeReturn, isPublicAttendeeHistory, attendeePasswordMin, attendeePasswordMax, detectAttendeeContact, type AccountIntent, type AttendeeAuth } from '#shared/attendee-account'
 
 definePageMeta({ layout: false, pageTransition: false })
 const route = useRoute()
@@ -28,12 +28,12 @@ const otherLabel = computed(() => intent.value === 'login' ? '立即注册' : '�
 const contactMethods = computed(() => ([
   { kind: 'phone', label: '手机号' }, { kind: 'email', label: '邮箱' },
 ] as const).filter(method => session.value?.[method.kind] !== false))
-const registerKind = ref<ContactKind>(contactMethods.value[0]?.kind ?? 'phone')
 const credentialMethods = [{ value: 'password', label: '账号登录' }, { value: 'code', label: '验证码登录' }] as const
 const credentialMethod = ref<'password' | 'code'>('password')
 const usingCode = computed(() => intent.value === 'register' || credentialMethod.value === 'code')
 const usingPassword = computed(() => intent.value === 'register' || credentialMethod.value === 'password')
 const identifier = ref('')
+const identifierTouched = ref(false)
 const code = ref('')
 const password = ref('')
 const passwordAgain = ref('')
@@ -46,10 +46,14 @@ const notice = ref('')
 const cooldown = ref(0)
 let timer: ReturnType<typeof setInterval> | undefined
 const heading = computed(() => intent.value === 'login' ? '登录' : '注册')
-const combinedLogin = computed(() => intent.value === 'login' && contactMethods.value.length > 1)
-const kind = computed<ContactKind>(() => intent.value === 'register' ? registerKind.value
-  : combinedLogin.value ? (identifier.value.includes('@') ? 'email' : 'phone') : contactMethods.value[0]?.kind ?? 'phone')
-const identifierLabel = computed(() => combinedLogin.value ? '手机号或邮箱' : kind.value === 'phone' ? '手机号' : '邮箱')
+const singleMethod = computed(() => contactMethods.value.length === 1 ? contactMethods.value[0] : undefined)
+const identifierLabel = computed(() => singleMethod.value?.label ?? '手机号或邮箱')
+const contact = computed(() => {
+  const parsed = detectAttendeeContact(identifier.value)
+  return parsed && contactMethods.value.some(method => method.kind === parsed.kind) ? parsed : undefined
+})
+const identifierError = computed(() => identifierTouched.value && identifier.value && !contact.value
+  ? '请输入有效的' + (singleMethod.value?.kind === 'phone' ? '中国大陆手机号' : identifierLabel.value) : '')
 const actionContext = computed(() => {
   const path = next.value.split('?')[0]
   if (path?.endsWith('/check-in')) return '登录后继续签到。'
@@ -78,16 +82,9 @@ function resetCredentials() {
 }
 
 watch(intent, () => {
-  identifier.value = ''
+  identifierTouched.value = false
   resetCredentials()
 })
-
-function setKind(value: ContactKind) {
-  if (registerKind.value === value) return
-  registerKind.value = value
-  identifier.value = ''
-  resetCredentials()
-}
 
 function setCredentialMethod(method: typeof credentialMethod.value) {
   if (credentialMethod.value === method) return
@@ -96,13 +93,14 @@ function setCredentialMethod(method: typeof credentialMethod.value) {
 }
 
 async function sendCode() {
-  if (sending.value || cooldown.value > 0 || !policyAccepted.value) return
+  const destination = contact.value
+  if (!destination || sending.value || verifying.value || cooldown.value > 0 || !policyAccepted.value) return
   sending.value = true
   sendError.value = ''
   notice.value = ''
   try {
     const response = await $fetch<{ retryAfter: number }>('/api/account/code', {
-      method: 'POST', body: { kind: kind.value, intent: intent.value, identifier: identifier.value, policyAccepted: policyAccepted.value },
+      method: 'POST', body: { ...destination, intent: intent.value, policyAccepted: policyAccepted.value },
     })
     notice.value = '验证码已发送，5 分钟内有效。'
     const until = Date.now() + response.retryAfter * 1000
@@ -120,7 +118,8 @@ async function sendCode() {
 }
 
 async function verify() {
-  if (verifying.value || sending.value || !policyAccepted.value) return
+  const destination = contact.value
+  if (!destination || verifying.value || sending.value || !policyAccepted.value) return
   if (intent.value === 'register' && password.value !== passwordAgain.value) {
     verifyError.value = '两次输入的密码不一致'
     return
@@ -132,7 +131,7 @@ async function verify() {
     await $fetch(usingCode.value ? '/api/account/verify' : '/api/account/password', {
       method: 'POST',
       body: {
-        kind: kind.value, intent: intent.value, identifier: identifier.value, policyAccepted: policyAccepted.value,
+        ...destination, intent: intent.value, policyAccepted: policyAccepted.value,
         ...(usingCode.value ? { code: code.value } : {}),
         ...(usingPassword.value ? { password: password.value } : {}),
       },
@@ -187,10 +186,6 @@ onBeforeUnmount(() => clearInterval(timer))
           <button v-for="method in credentialMethods" :key="method.value" type="button" :aria-pressed="credentialMethod === method.value"
             :disabled="sending || verifying" @click="setCredentialMethod(method.value)">{{ method.label }}</button>
         </div>
-        <div v-else-if="!wechatMode && intent === 'register' && contactMethods.length > 1" class="client-auth-methods" role="group" aria-label="注册账号类型">
-          <button v-for="method in contactMethods" :key="method.kind" type="button" :aria-pressed="kind === method.kind"
-            :disabled="sending || verifying" @click="setKind(method.kind)">{{ method.label }}</button>
-        </div>
         <form v-if="!wechatPreview && (wechatMode || contactMethods.length)" class="client-auth-form" :action="wechatMode ? '/api/account/wechat' : undefined"
           :method="wechatMode ? 'post' : undefined" @submit="submitAuth">
           <template v-if="wechatMode">
@@ -201,19 +196,20 @@ onBeforeUnmount(() => clearInterval(timer))
           <template v-else>
             <label for="client-identifier">{{ identifierLabel }}</label>
             <div class="entry-input">
-              <UIcon :name="combinedLogin ? 'i-lucide-user-round' : kind === 'phone' ? 'i-lucide-smartphone' : 'i-lucide-mail'" aria-hidden="true" />
-              <input id="client-identifier" v-model.trim="identifier" :type="combinedLogin ? 'text' : kind === 'phone' ? 'tel' : 'email'"
-                :autocomplete="intent === 'login' ? 'username' : kind === 'phone' ? 'tel' : 'email'" :maxlength="combinedLogin || kind === 'email' ? 254 : 16"
-                autocapitalize="none" :spellcheck="false"
-                :placeholder="'请输入' + identifierLabel" :readonly="sending || verifying" required @input="resetCode" />
+              <UIcon :name="singleMethod?.kind === 'phone' ? 'i-lucide-smartphone' : singleMethod?.kind === 'email' ? 'i-lucide-mail' : 'i-lucide-user-round'" aria-hidden="true" />
+              <input id="client-identifier" v-model.trim="identifier" :type="singleMethod?.kind === 'phone' ? 'tel' : singleMethod?.kind === 'email' ? 'email' : 'text'"
+                :autocomplete="singleMethod?.kind === 'phone' ? 'tel' : singleMethod?.kind === 'email' ? 'email' : 'username'" maxlength="254"
+                autocapitalize="none" :spellcheck="false" :aria-invalid="!!identifierError" :aria-describedby="identifierError ? 'client-identifier-error' : undefined"
+                :placeholder="'请输入' + identifierLabel" :readonly="sending || verifying" required @input="resetCode" @blur="identifierTouched = true" />
             </div>
+            <p v-if="identifierError" id="client-identifier-error" class="attendee-field-error">{{ identifierError }}</p>
             <label v-if="usingCode" for="client-code">验证码</label>
             <div v-if="usingCode" class="entry-input">
               <UIcon name="i-lucide-shield-check" aria-hidden="true" />
               <input id="client-code" v-model.trim="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码"
                 required minlength="6" maxlength="6" pattern="[0-9]{6}" :readonly="verifying" />
               <UButton type="button" variant="ghost" class="client-auth-code" :loading="sending"
-                :disabled="!identifier || verifying || cooldown > 0 || !policyAccepted" @click="sendCode">
+                :disabled="!contact || verifying || cooldown > 0 || !policyAccepted" @click="sendCode">
                 {{ cooldown ? cooldown + ' 秒后重发' : '发送验证码' }}
               </UButton>
             </div>
@@ -247,7 +243,8 @@ onBeforeUnmount(() => clearInterval(timer))
               和<NuxtLink :to="{ path: '/policies/terms', query: policyQuery }" target="_blank" rel="noopener">《用户协议》</NuxtLink>
             </div>
           </div>
-          <UButton type="submit" class="attendee-action client-auth-submit" :loading="!wechatMode && verifying" :disabled="sending || verifying || !policyAccepted">
+          <UButton type="submit" class="attendee-action client-auth-submit" :loading="!wechatMode && verifying"
+            :disabled="sending || verifying || !policyAccepted || (!wechatMode && !contact)">
             {{ wechatMode ? '打开微信扫码' : heading }}
           </UButton>
         </form>

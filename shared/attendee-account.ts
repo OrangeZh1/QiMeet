@@ -1,4 +1,15 @@
 export type ContactKind = 'email' | 'phone'
+
+export function detectAttendeeContact(input: string): { kind: ContactKind, identifier: string } | undefined {
+  const value = input.trim().normalize('NFC').toLowerCase()
+  if (value.length > 254) return
+  const phone = value.replace(/^\+86\s*/, '')
+  if (/^1[3-9]\d{9}$/.test(phone)) return { kind: 'phone', identifier: phone }
+  if (/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i.test(value)) {
+    return { kind: 'email', identifier: value }
+  }
+}
+
 export type AccountIntent = 'login' | 'register'
 export type AttendeeAccount = { id: number, kind: ContactKind | 'wechat', label: string }
 export type AttendeeContacts = { contactPhone: string | null, contactPhoneVerified: boolean, contactEmail: string | null }

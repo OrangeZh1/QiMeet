@@ -5,6 +5,18 @@ import { renderToString } from 'vue/server-renderer'
 import { createPasswordHash, signInAdmin } from '../server/utils/security.ts'
 import { markdownNodes } from '../shared/markdown.ts'
 import { markdownParts, markdownQuestions } from '../shared/markdown-tokens.ts'
+import { detectAttendeeContact } from '../shared/attendee-account.ts'
+
+test('统一账号输入识别中国大陆手机号和邮箱，并拒绝无法识别的值', () => {
+  assert.deepEqual(detectAttendeeContact('13900000000'), { kind: 'phone', identifier: '13900000000' })
+  assert.deepEqual(detectAttendeeContact(' +86 13900000000 '), { kind: 'phone', identifier: '13900000000' })
+  assert.deepEqual(detectAttendeeContact(' 13900000000+QiMeet@Example.TEST '), {
+    kind: 'email', identifier: '13900000000+qimeet@example.test',
+  })
+  for (const invalid of ['', '1390000000', '+1 13900000000', '13900000000@', 'name@example', '橙子']) {
+    assert.equal(detectAttendeeContact(invalid), undefined)
+  }
+})
 
 test('签到帮助在没有 toReversed 的环境下保留缩进代码和跨问答引用', async () => {
   const source = '[后一条答案的链接][later]\n\n## 第一问\n\n[前言的链接][start]\n\n## 第二问\n\n[later]: https://example.test/later'
