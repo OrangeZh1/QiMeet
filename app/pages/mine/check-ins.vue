@@ -9,7 +9,9 @@ const { data, error } = await useFetch<AccountPendingCheckin[]>('/api/account/pe
 if (attendeeErrorStatus(error.value) === 401) await navigateTo(attendeeLogin('/mine/check-ins'), { redirectCode: 302 })
 
 const now = useState('attendee-pending-checkins-clock', () => Date.now())
+const method = ref<'phone' | 'scan'>('phone')
 const pending = computed(() => (data.value || []).filter(item => Date.parse(item.endsAt) > now.value))
+const visible = computed(() => method.value === 'phone' ? pending.value.filter(item => item.directEnabled) : pending.value)
 let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   now.value = Date.now()
@@ -23,23 +25,27 @@ const isOpen = (item: AccountPendingCheckin) => Date.parse(item.startsAt) <= now
   <NuxtLayout name="attendee" toolbar-title="待签到" :back="{ to: '/mine', label: '我的' }">
     <section class="client-section pending-checkins">
       <h1 class="sr-only">待签到</h1>
+      <div class="attendee-tablist" role="group" aria-label="签到方式">
+        <button type="button" :aria-pressed="method === 'phone'" @click="method = 'phone'">手机签到</button>
+        <button type="button" :aria-pressed="method === 'scan'" @click="method = 'scan'">扫码签到</button>
+      </div>
+      <p v-if="method === 'scan'" class="attendee-helper">请用微信扫一扫或手机相机扫描主办方提供的现场签到码。</p>
       <p v-if="error" class="attendee-error" role="alert">{{ errorText(error, '暂时无法读取待签到环节') }}</p>
-      <ul v-else-if="pending.length" class="pending-list">
-        <li v-for="item in pending" :key="item.checkpointId" class="pending-card">
+      <ul v-else-if="visible.length" class="pending-list">
+        <li v-for="item in visible" :key="item.checkpointId" class="pending-card">
           <NuxtLink :to="attendeePath(item.eventSlug)" class="attendee-inline-link">{{ item.eventTitle }}</NuxtLink>
           <div class="pending-heading">
             <h2>{{ item.checkpointTitle }}</h2>
             <span class="attendee-label" :class="{ done: isOpen(item) }">{{ isOpen(item) ? '签到中' : '待开始' }}</span>
           </div>
           <p class="attendee-helper">{{ attendeeDateRange(item.startsAt, item.endsAt) }}</p>
-          <NuxtLink v-if="isOpen(item) && item.directEnabled" class="pending-action"
+          <NuxtLink v-if="isOpen(item) && method === 'phone'" class="pending-action"
             :to="{ path: attendeePath(item.eventSlug) + '/check-in', query: { point: item.checkpointId } }">手机签到</NuxtLink>
-          <p v-else-if="isOpen(item)" class="attendee-helper">到场后请扫描现场签到码。</p>
         </li>
       </ul>
       <div v-else class="pending-card pending-empty">
         <UIcon name="i-lucide-scan-line" aria-hidden="true" />
-        <h2>暂无待签到环节</h2>
+        <h2>{{ method === 'phone' && pending.length ? '暂无可手机签到的环节' : '暂无待签到环节' }}</h2>
         <NuxtLink to="/mine/registrations" class="attendee-inline-link">查看我的报名</NuxtLink>
       </div>
     </section>
