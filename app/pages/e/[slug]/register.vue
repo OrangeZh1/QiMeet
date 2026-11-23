@@ -10,7 +10,8 @@ const { data, error } = await details
 if (data.value?.registrationOpen && !data.value.signedIn) await navigateTo(attendeeLogin(route.fullPath), { redirectCode: 302 })
 if (data.value?.recognized) await navigateTo(returnToCheckIn || path + '/record', { replace: true, redirectCode: 302 })
 setAttendeeErrorStatus(error.value)
-useSeoMeta({ title: () => data.value ? '活动报名 · ' + data.value.conference.title : '活动报名' })
+const toolbarTitle = computed(() => data.value ? '活动报名' : '报名不可用')
+useSeoMeta({ title: () => data.value ? toolbarTitle.value + ' · ' + data.value.conference.title : toolbarTitle.value })
 useHead({ meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }] })
 
 const unavailableTitle = computed(() => {
@@ -78,7 +79,7 @@ async function copy() {
 
 <template>
   <NuxtLayout
-    name="attendee" toolbar-title="活动报名" :back-to-event="Boolean(data)"
+    name="attendee" :toolbar-title="toolbarTitle" :back-to-event="Boolean(data)" :back="data ? undefined : { to: '/activities', label: '活动首页' }"
     :class="{
       'signup-with-dock': showForm,
       'signup-keyboard-open': keyboardOpen,
@@ -103,7 +104,8 @@ async function copy() {
         <p v-if="copyStatus" role="status" class="attendee-notice">{{ copyStatus }}</p>
         <p v-if="smsStatus" role="status" class="attendee-helper">
           <template v-if="smsStatus === 'submitted'">报名短信已提交发送。</template>
-          <template v-else-if="smsStatus === 'missing-phone'">还没有已验证的手机号。<NuxtLink to="/mine/profile?edit=phone" class="attendee-inline-link">验证手机号</NuxtLink>后可接收后续活动的短信。</template>
+          <template v-else-if="smsStatus === 'missing-phone'">报名表未填写短信接收号码，未发送报名短信。</template>
+          <template v-else-if="smsStatus === 'unverified-contact'">在<NuxtLink to="/mine/profile" class="attendee-inline-link">个人资料</NuxtLink>验证手机号或邮箱后，可接收后续报名短信。</template>
           <template v-else-if="smsStatus === 'form-phone-unverified'">报名表填写的短信收件号码与已验证的手机号不同，短信未发送。</template>
           <template v-else-if="smsStatus === 'missing-template-values'">短信未发送，通知模板缺少可用的姓名或活动标题。</template>
           <template v-else>报名短信暂未发送。你可以在「我的报名」查看记录。</template>
@@ -117,13 +119,13 @@ async function copy() {
       <section v-else-if="data?.registrationOpen" class="signup-entry" aria-labelledby="attendee-register-heading">
         <h1 id="attendee-register-heading" class="attendee-form-event-title">{{ data.conference.title }}</h1>
         <p v-if="data.conference.registrationSms" class="attendee-helper signup-sms-hint">
-          用于接收短信的报名手机号须与<a href="/mine/profile?edit=phone" target="_blank" rel="noopener" class="attendee-inline-link">个人资料</a>中已验证的号码一致。
+          报名短信发送到表单填写的手机号。已绑定手机号时，须与<a href="/mine/profile?edit=phone" target="_blank" rel="noopener" class="attendee-inline-link">个人资料</a>中的已验证号码一致；仅绑定邮箱时，以表单填写的手机号为准。
         </p>
         <AttendeeForm v-if="data.signedIn" :slug="slug" :form="data.form" fixed-submit @saved="saved" />
       </section>
 
       <AttendeeUnavailable
-        v-else class="signup-unavailable" :title="unavailableTitle"
+        v-else :title="unavailableTitle"
         :message="unavailableMessage"
         :to="data ? path : undefined" :action="data ? '查看活动详情' : undefined"
       />

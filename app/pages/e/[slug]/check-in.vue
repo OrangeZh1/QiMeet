@@ -82,7 +82,8 @@ async function checkIn() {
 </script>
 
 <template>
-  <NuxtLayout name="attendee" :toolbar-title="pageTitle" :back-to-event="Boolean(event)">
+  <NuxtLayout name="attendee" :toolbar-title="pageTitle" :back-to-event="Boolean(event)"
+    :back="event ? undefined : { to: '/activities', label: '活动首页' }">
     <article class="checkin-screen">
       <header v-if="event" class="attendee-event-summary checkin-event">
         <img v-if="event.conference.coverUrl" :src="materialImagePreviewUrl(event.conference.coverUrl)" class="attendee-event-summary-cover" alt="" width="64" height="48" />
@@ -92,11 +93,11 @@ async function checkIn() {
         </div>
       </header>
       <AttendeeUnavailable
-        v-if="!event" class="checkin-unavailable" title="活动暂不可查看"
+        v-if="!event" title="活动暂不可查看"
         :message="errorText(eventError, '请向活动主办方确认链接。')"
       />
       <AttendeeUnavailable
-        v-else-if="event.conference.endedAt" class="checkin-unavailable" title="活动已结束"
+        v-else-if="event.conference.endedAt" title="活动已结束"
         message="现场签到已关闭。你仍可查看已有的报名和签到记录。"
         :to="path + '/record'" action="查看我的报名"
       />
@@ -142,7 +143,7 @@ async function checkIn() {
 .checkin-event { border-bottom: 1px solid var(--attendee-form-line); }
 .checkin-event-title { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
 .checkin-event-point { margin-top: 2px; font-size: 13px; color: var(--muted); }
-.checkin-body, .checkin-body.checkin-recovery, .checkin-unavailable.attendee-card {
+.checkin-body, .checkin-body.checkin-recovery {
   padding: 20px var(--attendee-form-gutter); border: 0; border-radius: 0; box-shadow: none;
 }
 .checkin-recovery :deep(h2), .checkin-result-title h2, .checkin-status h1 { font-size: 19px; font-weight: 700; }

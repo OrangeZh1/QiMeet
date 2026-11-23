@@ -392,7 +392,7 @@ async function saveNotification() {
               </div>
               <div v-if="selectedRole" class="contact-config">
                 <USwitch :model-value="selected.smsRole === selectedRole" :label="smsRoleLabel[selectedRole]" :disabled="saving" @update:model-value="bindSms" />
-                <p>{{ selectedRole === 'phone' ? '优先使用这里填写的号码，号码须与来宾已验证的手机号一致。留空使用已验证的手机号。' : '已配置姓名通知模板时，会把这里填写的姓名和活动标题发到短信中。' }}</p>
+                <p>{{ selectedRole === 'phone' ? '短信发送给这里填写的号码。来宾已验证手机号时，两个号码须一致；仅验证了邮箱时，使用填写的号码。' : '已配置姓名通知模板时，会把这里填写的姓名和活动标题发到短信中。' }}</p>
                 <p v-if="smsBoundElsewhere">启用后将从「{{ fieldName(smsBoundElsewhere) }}」解除短信绑定。</p>
               </div>
               <UFormField v-if="isFileField(selected.type)" label="最大上传数量">

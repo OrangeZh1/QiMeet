@@ -12,8 +12,8 @@ const qrProblem = (status: number, message: string, checkInIssue: CheckInIssue):
   fail(status, message, { checkInIssue })
 
 export async function issueRegistrationQr(conference: Conference) {
-  if (!conference.published) fail(409, '发布活动后即可生成报名二维码')
-  const url = origin() + '/e/' + conference.slug + '/register'
+  if (!conference.published) fail(409, '发布活动后即可生成活动二维码')
+  const url = origin() + '/e/' + conference.slug
   return { url, dataUrl: await qrImage(url) }
 }
 

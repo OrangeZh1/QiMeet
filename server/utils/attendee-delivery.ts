@@ -89,21 +89,22 @@ async function smsDelivery(purpose: 'verification' | 'registration'): Promise<{
   } }
 }
 
-export async function sendRegistrationSms(accountId: number, fields: { phone?: string | null, name?: string | null, activity?: string } = {}): Promise<RegistrationSmsStatus> {
+export async function sendRegistrationSms(accountId: number, fields: { phone?: string | null, name?: string | null, activity?: string }): Promise<RegistrationSmsStatus> {
   try {
-    const account = await first<{ verifiedPhone: string | null }>(
-      'SELECT verified_phone AS verifiedPhone FROM attendee_accounts WHERE id=? AND disabled_at IS NULL', [accountId],
+    const account = await first<{ verifiedPhone: string | null, verifiedEmail: string | null }>(
+      'SELECT verified_phone AS verifiedPhone,verified_email AS verifiedEmail FROM attendee_accounts WHERE id=? AND disabled_at IS NULL', [accountId],
     )
-    const phone = account?.verifiedPhone
-    if (!phone) return 'missing-phone'
-    if (fields.phone && fields.phone !== phone) return 'form-phone-unverified'
+    if (!account?.verifiedPhone && !account?.verifiedEmail) return 'unverified-contact'
+    if (!fields.phone) return 'missing-phone'
+    const recipient = phone(fields.phone)
+    if (account.verifiedPhone && recipient !== account.verifiedPhone) return 'form-phone-unverified'
     const name = fields.name?.trim()
     const activity = fields.activity?.trim()
     const details = name && /^[\p{L}\p{M}·・’' -]{1,35}$/u.test(name) && activity &&
       Array.from(activity).length <= 35 && !/[\x00-\x1f\x7f]/.test(activity) ? { name, activity } : undefined
     const { send, requiresDetails } = await smsDelivery('registration')
     if (requiresDetails && !details) return 'missing-template-values'
-    await send(phone, requiresDetails && details ? details : {})
+    await send(recipient, requiresDetails && details ? details : {})
     return 'submitted'
   } catch {
     return 'failed'

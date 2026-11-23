@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { isFileField, type Answer, type Attachment, type Field, type FormVersion, type Registration, type RegistrationSmsStatus } from '#shared/models'
+import { isContentField, isFileField, type Answer, type Attachment, type Field, type FormVersion, type Registration, type RegistrationSmsStatus } from '#shared/models'
 
 const props = defineProps<{ slug: string, form: FormVersion, registration?: Registration, fixedSubmit?: boolean }>()
 const emit = defineEmits<{ saved: [result: { registration: Registration, credential?: string, smsStatus?: RegistrationSmsStatus }], cancel: [] }>()
@@ -15,6 +15,7 @@ const fileErrors = reactive<Record<string, string>>({})
 const consent = ref(Boolean(props.registration?.identityConsented))
 const saving = ref(false)
 const error = ref('')
+const showValidation = ref(false)
 const identityFields = props.form.fields.filter(field => field.type === 'identity')
 const shouldConsent = computed(() => identityFields.some(field => field.required || Boolean(answers[field.id])))
 const uploaded = props.registration?.attachments || []
@@ -25,6 +26,38 @@ const fieldAttachments = (field: Field) => uploaded.filter(file => file.fieldId 
 const currentFileLink = (file: Attachment) => attendeeApi(props.slug, 'attachment') + '?id=' + file.id
 const maxFiles = (field: Field) => field.maxFiles ?? 1
 const activeFiles = (field: Field) => fieldAttachments(field).filter(file => !removals.has(file.id)).length + (files[field.id]?.length || 0)
+const fieldErrors = computed<Record<string, string>>(() => {
+  const errors: Record<string, string> = {}
+  if (!showValidation.value) return errors
+
+  if (props.form.legacyContact && !editing) {
+    if (!name.value.trim()) errors['attendee-registration-name'] = '请填写姓名'
+    if (!phone.value.trim()) errors['attendee-registration-phone'] = '请填写报名手机号'
+  }
+  for (const field of props.form.fields) {
+    if (!field.required || isContentField(field.type) || (editing && field.contactRole)) continue
+    const id = fieldInputId(field.id)
+    if (isFileField(field.type)) {
+      if (!activeFiles(field)) errors[id] = '请上传' + field.label
+      continue
+    }
+    const value = answers[field.id]
+    if (Array.isArray(value) ? value.length : value?.trim()) continue
+    errors[id] = (field.type === 'radio' || field.type === 'checkbox' ? '请选择' : '请填写') + field.label
+  }
+  if (shouldConsent.value && !consent.value) errors['attendee-identity-consent'] = '请确认身份证号收集用途'
+  return errors
+})
+const fieldErrorId = (id: string) => id + '-error'
+const errorAttributes = (id: string) => ({
+  'aria-invalid': !!fieldErrors.value[id],
+  'aria-describedby': fieldErrors.value[id] ? fieldErrorId(id) : undefined,
+})
+const fileError = (field: Field) => fileErrors[field.id] || fieldErrors.value[fieldInputId(field.id)]
+const fileDescription = (field: Field) => {
+  const id = fieldInputId(field.id)
+  return id + '-format' + (fileError(field) ? ' ' + fieldErrorId(id) : '')
+}
 
 function pickFiles(field: Field) {
   const input = document.getElementById(fieldInputId(field.id))
@@ -75,11 +108,7 @@ function removePending(field: Field, index: number) {
   delete fileErrors[field.id]
 }
 
-function validateCustomFields() {
-  for (const field of props.form.fields) {
-    if (field.type === 'checkbox' && field.required && !choiceValues(field).length) return '请选择' + field.label
-    if (isFileField(field.type) && field.required && !activeFiles(field)) return '请上传' + field.label
-  }
+function validateUploadTotal() {
   const keptBytes = uploaded.reduce((total, item) => total + (removals.has(item.id) ? 0 : item.byteCount), 0)
   const incomingBytes = Object.values(files).flat().reduce((total, file) => total + file.size, 0)
   if (keptBytes + incomingBytes > 20 * 1024 * 1024) return '每份报名的附件合计不得超过 20 MB。'
@@ -88,7 +117,17 @@ function validateCustomFields() {
 
 async function submit() {
   if (saving.value) return
-  error.value = validateCustomFields()
+  showValidation.value = true
+  error.value = ''
+  const firstInvalid = Object.keys(fieldErrors.value)[0]
+  if (firstInvalid) {
+    await nextTick()
+    const field = document.getElementById(firstInvalid + '-trigger') || document.getElementById(firstInvalid)
+    const control = field instanceof HTMLFieldSetElement ? field.querySelector('input') : field
+    control?.focus()
+    return
+  }
+  error.value = validateUploadTotal()
   if (error.value) return
 
   saving.value = true
@@ -120,25 +159,28 @@ async function submit() {
 </script>
 
 <template>
-  <form class="attendee-input-form" :class="{ 'signup-form': fixedSubmit }" @submit.prevent="submit">
+  <form class="attendee-input-form" :class="{ 'signup-form': fixedSubmit }" novalidate @submit.prevent="submit">
     <div v-if="form.legacyContact" class="attendee-field">
       <label for="attendee-registration-name">姓名 <span v-if="!editing" class="attendee-required" aria-hidden="true">*</span></label>
-      <input id="attendee-registration-name" v-model.trim="name" :readonly="editing" maxlength="80" required autocomplete="name" />
+      <input id="attendee-registration-name" v-model.trim="name" :readonly="editing" maxlength="80" required autocomplete="name" v-bind="errorAttributes('attendee-registration-name')" />
+      <p v-if="fieldErrors['attendee-registration-name']" id="attendee-registration-name-error" class="attendee-field-error">{{ fieldErrors['attendee-registration-name'] }}</p>
     </div>
     <div v-if="form.legacyContact" class="attendee-field">
       <label for="attendee-registration-phone">报名手机号 <span v-if="!editing" class="attendee-required" aria-hidden="true">*</span></label>
-      <input id="attendee-registration-phone" v-model.trim="phone" :readonly="editing" maxlength="30" required type="tel" inputmode="tel" autocomplete="tel" />
+      <input id="attendee-registration-phone" v-model.trim="phone" :readonly="editing" maxlength="30" required type="tel" inputmode="tel" autocomplete="tel" v-bind="errorAttributes('attendee-registration-phone')" />
+      <p v-if="fieldErrors['attendee-registration-phone']" id="attendee-registration-phone-error" class="attendee-field-error">{{ fieldErrors['attendee-registration-phone'] }}</p>
     </div>
     <template v-for="field in form.fields" :key="field.id">
       <h2 v-if="field.type === 'title'" class="attendee-field-title">{{ field.label }}</h2>
       <p v-else-if="field.type === 'note'" class="attendee-field-note">{{ field.label }}</p>
-      <fieldset v-else-if="field.type === 'radio' || field.type === 'checkbox'" class="attendee-field attendee-choice-field">
+      <fieldset v-else-if="field.type === 'radio' || field.type === 'checkbox'" :id="fieldInputId(field.id)" class="attendee-field attendee-choice-field">
         <legend>{{ field.label }} <span v-if="field.required" class="attendee-required" aria-hidden="true">*</span><span v-if="field.required" class="sr-only">必填</span></legend>
         <label v-for="option in field.options" :key="option" class="attendee-option">
-          <input v-if="field.type === 'radio'" v-model="answers[field.id]" type="radio" :name="fieldInputId(field.id)" :value="option" :required="field.required" />
-          <input v-else type="checkbox" :checked="choiceValues(field).includes(option)" :value="option" @change="toggleChoice(field, option, $event)" />
+          <input v-if="field.type === 'radio'" v-model="answers[field.id]" type="radio" :name="fieldInputId(field.id)" :value="option" :required="field.required" v-bind="errorAttributes(fieldInputId(field.id))" />
+          <input v-else type="checkbox" :checked="choiceValues(field).includes(option)" :value="option" v-bind="errorAttributes(fieldInputId(field.id))" @change="toggleChoice(field, option, $event)" />
           {{ option }}
         </label>
+        <p v-if="fieldErrors[fieldInputId(field.id)]" :id="fieldErrorId(fieldInputId(field.id))" class="attendee-field-error">{{ fieldErrors[fieldInputId(field.id)] }}</p>
       </fieldset>
       <div v-else-if="isFileField(field.type)" class="attendee-field">
         <label :for="fieldInputId(field.id)">{{ field.label }} <span v-if="field.required" class="attendee-required" aria-hidden="true">*</span></label>
@@ -159,14 +201,15 @@ async function submit() {
           :id="fieldInputId(field.id)" type="file" :hidden="fixedSubmit"
           :multiple="maxFiles(field) > 1" :disabled="activeFiles(field) >= maxFiles(field)"
           :accept="field.type === 'image' ? '.jpg,.jpeg,.png,.webp' : '.pdf,.docx,.xlsx'"
-          :aria-describedby="fieldInputId(field.id) + '-format'"
-          :aria-invalid="!!fileErrors[field.id]"
+          :aria-describedby="fileDescription(field)"
+          :aria-invalid="!!fileError(field)"
           @change="chooseFiles(field, $event)"
         />
         <button
-          v-if="fixedSubmit" type="button" class="signup-upload-button"
+          v-if="fixedSubmit" :id="fieldInputId(field.id) + '-trigger'" type="button" class="signup-upload-button"
           :aria-label="(field.type === 'image' ? '添加图片：' : '添加文件：') + field.label"
-          :aria-describedby="fieldInputId(field.id) + '-format'"
+          :aria-describedby="fileDescription(field)"
+          :aria-invalid="!!fileError(field)"
           :disabled="activeFiles(field) >= maxFiles(field)" @click="pickFiles(field)"
         >
           <UIcon :name="field.type === 'image' ? 'i-lucide-image-plus' : 'i-lucide-paperclip'" aria-hidden="true" />
@@ -177,17 +220,19 @@ async function submit() {
           {{ field.type === 'image' ? 'JPG、PNG 或 WebP，单个最大 5 MB。' : 'PDF、DOCX 或 XLSX，单个最大 10 MB。' }}
           <span v-if="!fixedSubmit">{{ activeFiles(field) }} / {{ maxFiles(field) }} 个附件。</span>
         </small>
-        <p v-if="fileErrors[field.id]" class="attendee-field-error" role="alert">{{ fileErrors[field.id] }}</p>
+        <p v-if="fileError(field)" :id="fieldErrorId(fieldInputId(field.id))" class="attendee-field-error" :role="fileErrors[field.id] ? 'alert' : undefined">{{ fileError(field) }}</p>
       </div>
       <div v-else class="attendee-field">
         <label :for="fieldInputId(field.id)">{{ field.label }} <span v-if="field.required" class="attendee-required" aria-hidden="true">*</span></label>
-        <textarea v-if="field.type === 'textarea'" :id="fieldInputId(field.id)" v-model="answers[field.id]" :required="field.required" maxlength="4000"></textarea>
+        <textarea v-if="field.type === 'textarea'" :id="fieldInputId(field.id)" v-model="answers[field.id]" :required="field.required" maxlength="4000" v-bind="errorAttributes(fieldInputId(field.id))"></textarea>
         <input
           v-else :id="fieldInputId(field.id)" v-model="answers[field.id]" :required="field.required" :readonly="editing && !!field.contactRole"
           :type="field.type === 'phone' ? 'tel' : 'text'" :inputmode="field.type === 'phone' ? 'tel' : 'text'"
           :maxlength="field.contactRole === 'name' ? 80 : field.type === 'identity' ? 18 : field.type === 'phone' ? 30 : 500"
           :autocomplete="field.type === 'phone' ? 'tel' : 'off'"
+          v-bind="errorAttributes(fieldInputId(field.id))"
         />
+        <p v-if="fieldErrors[fieldInputId(field.id)]" :id="fieldErrorId(fieldInputId(field.id))" class="attendee-field-error">{{ fieldErrors[fieldInputId(field.id)] }}</p>
       </div>
     </template>
 
@@ -195,9 +240,10 @@ async function submit() {
       <strong>身份证号收集用途</strong>
       <p class="attendee-field-note">{{ form.identityPurpose }}</p>
       <label>
-        <input v-model="consent" type="checkbox" :required="shouldConsent" />
+        <input id="attendee-identity-consent" v-model="consent" type="checkbox" :required="shouldConsent" v-bind="errorAttributes('attendee-identity-consent')" />
         <span>我已阅读上述说明，并同意收集身份证号码。</span>
       </label>
+      <p v-if="fieldErrors['attendee-identity-consent']" id="attendee-identity-consent-error" class="attendee-field-error">{{ fieldErrors['attendee-identity-consent'] }}</p>
     </aside>
     <p v-if="error && !fixedSubmit" class="attendee-error" role="alert">{{ error }}</p>
     <div class="attendee-actions" :class="{ 'signup-action-dock': fixedSubmit }">
@@ -207,3 +253,12 @@ async function submit() {
     </div>
   </form>
 </template>
+
+<style scoped>
+.attendee-input-form :is(input, textarea, .signup-upload-button)[aria-invalid='true']:not([type='radio']):not([type='checkbox']) {
+  border-color: #b45261;
+}
+.attendee-input-form :is(input, textarea)[aria-invalid='true']:not([type='radio']):not([type='checkbox']):focus {
+  box-shadow: 0 0 0 2px rgb(180 82 97 / 16%);
+}
+</style>

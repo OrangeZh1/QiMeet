@@ -9,6 +9,8 @@
   color: #151a25;
 }
 .attendee-shell--event .attendee-top { border-color: var(--event-line); }
+.attendee-shell--event .attendee-top-back { -webkit-tap-highlight-color: transparent; }
+.attendee-shell--event .attendee-top-back:hover { background: transparent; }
 .attendee-shell--event .attendee-top-inner {
   width: min(100%, var(--event-width));
   min-height: 56px;
@@ -94,7 +96,6 @@
 a.event-enroll-secondary:hover { background: #e2ebfb; }
 .event-enroll-action:focus-visible { outline-offset: 2px; }
 .event-enroll-action:disabled { color: #525d71; background: #e7ecf3; cursor: default; }
-.event-unavailable { padding: 16px; }
 @media (max-width: 359px) {
   .event-fact { grid-template-columns: 80px minmax(0,1fr); gap: 6px; }
   .event-fact dt, .event-fact dd { font-size: 13px; }

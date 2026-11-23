@@ -128,18 +128,18 @@ async function share() {
   try {
     shareQr.value = await manageRequest<Pick<QrDisplay, 'url' | 'dataUrl'>>('registration-qr', { query: { eventId: id } })
   } catch (cause) {
-    shareError.value = errorText(cause, '未能生成报名二维码')
+    shareError.value = errorText(cause, '未能生成活动二维码')
   } finally {
     sharePending.value = false
   }
 }
-async function copyRegistrationLink() {
+async function copyEventLink() {
   if (!shareQr.value || copyingShare.value) return
   copyingShare.value = true
   try {
     await copyText(shareQr.value.url)
-    toast.add({ title: '报名链接已复制', color: 'success' })
-  } catch { toast.add({ title: '无法复制，请手动复制报名页链接', color: 'error' }) }
+    toast.add({ title: '活动链接已复制', color: 'success' })
+  } catch { toast.add({ title: '无法复制，请手动复制活动链接', color: 'error' }) }
   finally { copyingShare.value = false }
 }
 async function updated() {
@@ -170,7 +170,7 @@ function agendaSaved(agenda: AdminEvent['conference']['agenda']) {
       </header>
       <div class="toolbar-actions">
         <UButton v-if="conference.published" :to="'/e/' + conference.slug" target="_blank" color="neutral" variant="outline" icon="i-lucide-external-link">查看活动页</UButton>
-        <UButton v-if="conference.published" type="button" color="neutral" variant="outline" icon="i-lucide-qr-code" @click="share">报名二维码</UButton>
+        <UButton v-if="conference.published" type="button" color="neutral" variant="outline" icon="i-lucide-qr-code" @click="share">活动二维码</UButton>
         <UButton v-if="!conference.published" color="primary" :loading="publishBusy" @click="publish">发布活动</UButton>
         <UDropdownMenu :items="stateItems" :disabled="publishBusy || closing" :content="{ align: 'end' }">
           <UButton v-if="conference.published" type="button" color="neutral" variant="outline" trailing-icon="i-lucide-chevron-down"
@@ -179,22 +179,22 @@ function agendaSaved(agenda: AdminEvent['conference']['agenda']) {
         </UDropdownMenu>
       </div>
     </div>
-    <ConsoleDialog v-model:open="shareDialog" title="报名二维码" description="来宾扫码可直接打开活动报名表。">
+    <ConsoleDialog v-model:open="shareDialog" title="活动二维码" description="来宾扫码打开活动详情，可在详情页报名。">
       <template #body>
-        <p v-if="sharePending" class="help py-8 text-center" role="status">正在生成报名二维码…</p>
+        <p v-if="sharePending" class="help py-8 text-center" role="status">正在生成活动二维码…</p>
         <div v-else-if="shareError" class="grid gap-3">
           <p class="feedback error" role="alert">{{ shareError }}</p>
           <UButton class="justify-self-start" type="button" variant="outline" @click="share">重试</UButton>
         </div>
         <div v-else-if="shareQr" class="grid gap-4">
-          <img :src="shareQr.dataUrl" alt="活动报名二维码" width="240" height="240" class="mx-auto max-w-full rounded-lg border border-default" />
-          <UInput :model-value="shareQr.url" readonly aria-label="报名链接" />
+          <img :src="shareQr.dataUrl" alt="活动二维码" width="240" height="240" class="mx-auto max-w-full rounded-lg border border-default" />
+          <UInput :model-value="shareQr.url" readonly aria-label="活动链接" />
         </div>
       </template>
       <template #footer>
         <div v-if="shareQr" class="closure-actions">
-          <UButton :href="shareQr.dataUrl" :download="conference.slug + '-报名二维码.png'" color="neutral" variant="outline" icon="i-lucide-download">下载二维码</UButton>
-          <UButton type="button" icon="i-lucide-link" :loading="copyingShare" @click="copyRegistrationLink">复制报名链接</UButton>
+          <UButton :href="shareQr.dataUrl" :download="conference.slug + '-活动二维码.png'" color="neutral" variant="outline" icon="i-lucide-download">下载二维码</UButton>
+          <UButton type="button" icon="i-lucide-link" :loading="copyingShare" @click="copyEventLink">复制活动链接</UButton>
         </div>
       </template>
     </ConsoleDialog>

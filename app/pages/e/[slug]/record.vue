@@ -11,6 +11,8 @@ const { data: event, error: eventError } = await details
 if (event.value && !event.value.signedIn) await navigateTo(attendeeLogin(path + '/record' + (recovering.value ? '?recover=1' : '')), { redirectCode: 302 })
 setAttendeeErrorStatus(eventError.value)
 const pageLabel = computed(() => recovering.value ? '找回报名' : '报名详情')
+const back = computed(() => recovering.value ? { to: '/mine/recover', label: '活动列表' }
+  : !event.value ? { to: '/activities', label: '活动首页' } : undefined)
 useSeoMeta({ title: () => event.value ? pageLabel.value + ' · ' + event.value.conference.title : pageLabel.value })
 
 const { data, error } = await useAsyncData('attendee-record:' + slug, async () => {
@@ -54,10 +56,10 @@ const attachmentLink = (id: string) => attendeeApi(slug, 'attachment') + '?id=' 
 </script>
 
 <template>
-  <NuxtLayout name="attendee" :toolbar-title="pageLabel" :back="recovering ? { to: '/mine/recover', label: '活动列表' } : undefined" :navigation="!recovering">
+  <NuxtLayout name="attendee" :toolbar-title="pageLabel" :back="back" :navigation="!recovering">
     <div class="record-screen">
       <AttendeeUnavailable
-        v-if="!event" class="record-unavailable" title="活动暂不可查看"
+        v-if="!event" title="活动暂不可查看"
         :message="errorText(eventError, '请向活动主办方确认链接。')"
       />
       <template v-else>

@@ -79,7 +79,6 @@ html.qm-attendee-page body { overflow-x: clip; }
 .attendee-error { background: #fff1f2; color: #922b3d; }
 .attendee-notice { background: #eef3fd; color: #25457b; }
 .attendee-credential { padding: 14px; background: #eff4ff; border: 1px dashed #a4b8e6; border-radius: 10px; text-align: center; display: block; font-size: clamp(15px, 3.1vw, 20px); user-select: all; overflow-wrap: anywhere; color: #143376; }
-.attendee-result { display: grid; gap: 12px; justify-items: start; align-content: start; }
 .attendee-result-icon { display: grid; place-items: center; width: 51px; height: 51px; border-radius: 14px; font-size: 26px; color: var(--attendee-blue); background: #edf3ff; }
 .attendee-result-icon.success { color: #18684b; background: #e5f5ea; }
 .attendee-result-icon.warning { color: #9b4919; background: #fff0e6; }

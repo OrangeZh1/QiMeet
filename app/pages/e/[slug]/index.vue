@@ -191,7 +191,7 @@ const checkinLink = (point: number) => {
         </template>
       </UModal>
     </article>
-    <AttendeeUnavailable v-else class="attendee-narrow event-unavailable"
+    <AttendeeUnavailable v-else
       title="活动暂不可查看"
       :message="errorText(error, '请向活动主办方确认链接或稍后再试。')" />
   </NuxtLayout>

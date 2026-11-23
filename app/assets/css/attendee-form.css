@@ -66,8 +66,7 @@
 .signup-upload-button:disabled { background: #f5f6f8; color: #677183; border-color: #ccd2dc; }
 .signup-upload-button > [aria-hidden='true'] { font-size: 17px; flex: none; }
 .signup-upload-count { margin-inline-start: auto; color: #58657b; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 540; }
-.signup-receipt, .attendee-shell--form .signup-unavailable { padding: 23px var(--attendee-form-gutter); }
-.signup-unavailable { border: 0; border-radius: 0; box-shadow: none; }
+.signup-receipt { padding: 23px var(--attendee-form-gutter); }
 
 .signup-form .signup-action-dock {
   position: fixed; left: 50%; bottom: 0; z-index: 24; transform: translateX(-50%);
@@ -103,7 +102,6 @@
 .attendee-compact-recovery .attendee-input-form { gap: 14px; }
 .attendee-compact-recovery .attendee-input-form > .attendee-action { width: 100%; }
 .record-actions { padding: 13px var(--attendee-form-gutter) 18px; }
-.attendee-shell--form .record-unavailable { border: 0; border-radius: 0; box-shadow: none; padding: 20px var(--attendee-form-gutter); }
 
 .attendee-event-summary {
   padding: 14px var(--attendee-form-gutter);
