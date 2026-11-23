@@ -29,7 +29,10 @@ export async function saveHelpSettings(input: Record<string, unknown>) {
     if (!item || typeof item !== 'object') fail(400, '问答格式有误')
     const id = text(item.id, 36, '问答编号', false) || randomUUID()
     if (!/^[a-z0-9-]+$/i.test(id)) fail(400, '问答编号无效')
-    return { id, question: text(item.question, helpQuestionLength, '问题'), answer: text(item.answer, helpAnswerLength, '答案') }
+    if (typeof item.answer !== 'string') fail(400, '答案格式有误')
+    const answer = item.answer.normalize('NFC')
+    if (!answer.trim() || answer.length > helpAnswerLength || answer.includes('\u0000')) fail(400, '请检查答案')
+    return { id, question: text(item.question, helpQuestionLength, '问题'), answer }
   })
   if (new Set(items.map(item => item.id)).size !== items.length) fail(400, '问答编号重复')
   if (items.reduce((length, item) => length + item.question.length + item.answer.length, 0) > 30000) fail(400, '帮助内容最多 30000 字符')

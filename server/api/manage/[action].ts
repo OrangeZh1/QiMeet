@@ -1,3 +1,5 @@
+import { signInAdmin } from '../../utils/security'
+
 export default defineEventHandler(async (event) => {
   privateResponse(event)
   const action = getRouterParam(event, 'action')
@@ -7,11 +9,8 @@ export default defineEventHandler(async (event) => {
   if (action === 'login' && method === 'POST') {
     throttle(event, 'login', 10, 15 * 60 * 1000)
     const input = await jsonBody(event)
-    if (typeof input.password !== 'string' || input.password.length > 200 ||
-      !await verifyAdmin(text(input.username, 64, '账号'), input.password)) {
-      fail(401, '账号或密码有误')
-    }
-    await setSession(event, 'admin', null)
+    if (typeof input.password !== 'string' || input.password.length > 200) fail(401, '账号或密码有误')
+    await signInAdmin(event, text(input.username, 64, '账号'), input.password)
     return { authenticated: true }
   }
 

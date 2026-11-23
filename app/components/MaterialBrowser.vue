@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ConsoleInput from '#qiandao-console/ConsoleInput.vue'
+import ConsoleListPagination from './console/ConsoleListPagination.vue'
 import { displayDate, type Material } from '#shared/models'
 import { materialKinds, materialPolicy, type MaterialKind } from '#shared/materials'
 import ConsoleDialog from './material/ConsoleDialog.vue'
@@ -51,7 +52,8 @@ const searchText = ref('')
 const searchTerm = ref('')
 const error = ref('')
 const visibleError = computed(() => error.value || (kind.value === initialKind && !loaded.value && initial.error.value ? errorText(initial.error.value, '素材加载失败') : ''))
-const searchBusy = ref(false)
+const emptyLabel = computed(() => visibleError.value ? '素材暂不可用' : searchTerm.value ? '没有匹配的素材' : '暂无素材')
+const searchAction = ref<'search' | 'reset'>()
 const pageAction = ref<'previous' | 'next' | null>(null)
 const uploading = ref(false)
 const fileInput = ref<HTMLInputElement>()
@@ -61,20 +63,24 @@ const deleteOpen = ref(false)
 const deleteTarget = ref<Material>()
 const deleting = ref(false)
 const deleteError = ref('')
-const view = ref<'grid' | 'list'>('grid')
+const view = ref<'grid' | 'list'>('list')
 const totalPages = computed(() => Math.max(1, Math.ceil(result.value.total / 12)))
 let latestRequest = 0
 
-async function load(page: number) {
+async function load(page: number, term = searchTerm.value) {
   const requestId = ++latestRequest
   error.value = ''
   try {
     const next = await request<MaterialPage>('/api/manage/materials', {
-      query: { kind: kind.value, page, q: searchTerm.value || undefined },
+      query: { kind: kind.value, page, q: term || undefined },
     })
-    if (requestId === latestRequest) loaded.value = next
+    if (requestId !== latestRequest) return false
+    loaded.value = next
+    searchTerm.value = term
+    return true
   } catch (cause) {
     if (requestId === latestRequest) error.value = errorText(cause, '素材加载失败')
+    return false
   }
 }
 
@@ -91,19 +97,20 @@ async function switchKind(value: MaterialKind) {
   }
 }
 
-async function search() {
-  if (searchBusy.value || kindLoading.value) return
-  searchBusy.value = true
-  searchTerm.value = searchText.value.trim()
+async function search(action: 'search' | 'reset' = 'search') {
+  if (searchAction.value || kindLoading.value) return
+  const draft = searchText.value
+  searchAction.value = action
   try {
-    await load(1)
+    const applied = await load(1, action === 'reset' ? '' : draft.trim())
+    if (applied && action === 'reset' && searchText.value === draft) searchText.value = ''
   } finally {
-    searchBusy.value = false
+    searchAction.value = undefined
   }
 }
 
 async function turn(direction: 'previous' | 'next') {
-  if (pageAction.value || searchBusy.value) return
+  if (pageAction.value || searchAction.value || kindLoading.value) return
   const page = result.value.page + (direction === 'next' ? 1 : -1)
   if (page < 1 || page > totalPages.value) return
   pageAction.value = direction
@@ -126,8 +133,8 @@ async function upload(event: Event) {
     const material = await uploadLibraryMaterial(file, kind.value)
     toast.add({ title: '素材已上传', color: 'success' })
     if (props.picking) selectMaterial(material.id)
-    searchText.value = searchTerm.value = ''
-    await load(1)
+    const draft = searchText.value
+    if (await load(1, '') && searchText.value === draft) searchText.value = ''
   } catch (cause) {
     error.value = errorText(cause, cause instanceof Error ? cause.message : '素材上传失败')
   } finally {
@@ -177,33 +184,48 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <section class="material-browser" :class="{ 'material-panel': !picking }" :aria-label="policy.label + '素材'">
-    <div v-if="!picking" class="material-kind-tabs" role="group" aria-label="素材类型">
-      <button v-for="item in materialKinds" :key="item" type="button" class="material-kind"
-        :aria-pressed="kind === item" :disabled="kindLoading || uploading || deleting" @click="switchKind(item)">
-        {{ materialPolicy[item].label }}
-      </button>
-    </div>
+  <section class="material-browser" :class="{ 'panel list-panel material-panel': !picking }" :aria-label="picking ? policy.label + '素材' : undefined"
+    :aria-labelledby="picking ? undefined : 'materials-heading'">
     <input ref="fileInput" type="file" :accept="policy.accept" hidden @change="upload" />
-    <div class="material-toolbar">
-      <UButton type="button" icon="i-lucide-upload" :loading="uploading" :disabled="kindLoading" @click="fileInput?.click()">{{ picking ? '上传' + policy.label : '本地上传' }}</UButton>
-      <div class="material-search">
-        <ConsoleInput v-model="searchText" placeholder="请输入名称" aria-label="素材名称" maxlength="180" @keydown.enter.prevent="search" />
-        <UButton type="button" icon="i-lucide-search" color="neutral" variant="outline" aria-label="搜索素材" title="搜索素材"
-          :loading="searchBusy" :disabled="kindLoading" @click="search" />
+    <header v-if="!picking" class="panel-toolbar list-heading">
+      <h1 id="materials-heading" class="page-title">素材库</h1>
+      <UButton type="button" icon="i-lucide-upload" :loading="uploading" :disabled="kindLoading" @click="fileInput?.click()">本地上传</UButton>
+    </header>
+    <form v-if="!picking" class="panel-toolbar list-filters" @submit.prevent="search()">
+      <UInput v-model="searchText" class="list-search" placeholder="素材名称" aria-label="素材名称" maxlength="180" />
+      <div class="toolbar-actions">
+        <UButton type="submit" icon="i-lucide-search" :loading="searchAction === 'search'" :disabled="kindLoading || !!searchAction">搜索</UButton>
+        <UButton type="button" variant="outline" color="neutral" icon="i-lucide-rotate-ccw" :loading="searchAction === 'reset'"
+          :disabled="kindLoading || !!searchAction || (!searchText && !searchTerm && result.page === 1)" @click="search('reset')">重置</UButton>
       </div>
-      <div v-if="!picking" class="material-views" role="group" aria-label="素材视图">
+    </form>
+    <div v-if="!picking" class="panel-toolbar material-display-toolbar">
+      <div class="material-kind-tabs" role="group" aria-label="素材类型">
+        <button v-for="item in materialKinds" :key="item" type="button" class="material-kind"
+          :aria-pressed="kind === item" :disabled="kindLoading || uploading || deleting" @click="switchKind(item)">
+          {{ materialPolicy[item].label }}
+        </button>
+      </div>
+      <div class="material-views" role="group" aria-label="素材视图">
         <UButton type="button" icon="i-lucide-list" color="neutral" :variant="view === 'list' ? 'soft' : 'ghost'"
           aria-label="列表视图" title="列表视图" :aria-pressed="view === 'list'" @click="view = 'list'" />
         <UButton type="button" icon="i-lucide-layout-grid" color="neutral" :variant="view === 'grid' ? 'soft' : 'ghost'"
           aria-label="网格视图" title="网格视图" :aria-pressed="view === 'grid'" @click="view = 'grid'" />
       </div>
     </div>
-    <div class="material-meta">
-      <span v-if="!initialLoading">共 {{ result.total }} {{ kind === 'image' ? '张' : '个' }}{{ policy.label }}</span>
+    <div v-else class="material-toolbar">
+      <UButton type="button" icon="i-lucide-upload" :loading="uploading" @click="fileInput?.click()">上传{{ policy.label }}</UButton>
+      <form class="material-search" @submit.prevent="search()">
+        <ConsoleInput v-model="searchText" placeholder="请输入名称" aria-label="素材名称" maxlength="180" />
+        <UButton type="submit" icon="i-lucide-search" color="neutral" variant="outline" aria-label="搜索素材" title="搜索素材"
+          :loading="searchAction === 'search'" />
+      </form>
+    </div>
+    <div class="material-meta" :class="{ 'material-library-meta': !picking }">
+      <span v-if="picking && !initialLoading">共 {{ result.total }} {{ kind === 'image' ? '张' : '个' }}{{ policy.label }}</span>
       <span class="material-policy">{{ policy.formats }} · 最大 {{ policy.maxMb }} MB</span>
     </div>
-    <p v-if="visibleError" class="feedback error" role="alert">{{ visibleError }}</p>
+    <p v-if="visibleError" class="feedback error" :class="{ 'panel-message': !picking }" role="alert">{{ visibleError }}</p>
 
     <div v-if="initialLoading" class="material-empty" role="status">
       <UIcon name="i-lucide-loader-circle" class="motion-safe:animate-spin" aria-hidden="true" />
@@ -230,10 +252,11 @@ async function confirmDelete() {
         </div>
       </li>
     </ul>
-    <div v-else-if="result.items.length" class="material-table-scroll">
-      <table class="material-table">
+    <div v-else-if="!picking && view === 'list'" class="table-scroll">
+      <table class="activity-table material-table">
         <thead><tr><th scope="col">名称</th><th scope="col">格式</th><th scope="col">大小</th><th scope="col">上传时间</th><th scope="col">操作</th></tr></thead>
         <tbody>
+          <tr v-if="!result.items.length"><td colspan="5" class="material-table-empty">{{ emptyLabel }}</td></tr>
           <tr v-for="item in result.items" :key="item.id">
             <td><div class="material-table-name">
               <img v-if="item.kind === 'image'" :src="item.url" alt="" width="36" height="36" loading="lazy" />
@@ -242,9 +265,9 @@ async function confirmDelete() {
             </div></td>
             <td>{{ formatLabel(item) }}</td><td>{{ sizeLabel(item.byteCount) }}</td><td>{{ displayDate(item.createdAt) }}</td>
             <td><div class="material-item-actions">
-              <UButton type="button" size="xs" variant="link" :aria-label="'查看 ' + item.name" @click="choose(item)">查看</UButton>
-              <UButton :href="downloadUrl(item)" size="xs" color="neutral" variant="link" :aria-label="'下载 ' + item.name" external>下载</UButton>
-              <UButton type="button" size="xs" color="error" variant="link" :aria-label="'删除 ' + item.name" @click="askDelete(item)">删除</UButton>
+              <UButton type="button" size="sm" variant="ghost" :aria-label="'查看 ' + item.name" @click="choose(item)">查看</UButton>
+              <UButton :href="downloadUrl(item)" size="sm" color="neutral" variant="ghost" :aria-label="'下载 ' + item.name" external>下载</UButton>
+              <UButton type="button" size="sm" color="error" variant="ghost" :aria-label="'删除 ' + item.name" @click="askDelete(item)">删除</UButton>
             </div></td>
           </tr>
         </tbody>
@@ -252,14 +275,16 @@ async function confirmDelete() {
     </div>
     <div v-else class="material-empty">
       <UIcon :name="kindIcons[kind]" aria-hidden="true" />
-      <span>{{ visibleError ? '素材暂不可用' : searchTerm ? '没有匹配的素材' : '暂无素材' }}</span>
+      <span>{{ emptyLabel }}</span>
     </div>
 
-    <div v-if="totalPages > 1" class="material-pagination">
+    <ConsoleListPagination v-if="!picking" label="素材库" :count="initialLoading ? '正在加载素材…' : `共 ${result.total} ${kind === 'image' ? '张' : '个'}${policy.label}`"
+      :page="result.page" :pages="totalPages" :pending="pageAction ?? undefined" :disabled="initialLoading || !!searchAction" @turn="turn" />
+    <div v-else-if="totalPages > 1" class="material-pagination">
       <span class="help">第 {{ result.page }} / {{ totalPages }} 页</span>
       <div class="material-views">
-        <UButton type="button" color="neutral" variant="outline" :disabled="result.page <= 1 || !!pageAction || searchBusy" :loading="pageAction === 'previous'" @click="turn('previous')">上一页</UButton>
-        <UButton type="button" color="neutral" variant="outline" :disabled="result.page >= totalPages || !!pageAction || searchBusy" :loading="pageAction === 'next'" @click="turn('next')">下一页</UButton>
+        <UButton type="button" color="neutral" variant="outline" :disabled="result.page <= 1 || !!pageAction || !!searchAction" :loading="pageAction === 'previous'" @click="turn('previous')">上一页</UButton>
+        <UButton type="button" color="neutral" variant="outline" :disabled="result.page >= totalPages || !!pageAction || !!searchAction" :loading="pageAction === 'next'" @click="turn('next')">下一页</UButton>
       </div>
     </div>
     <ImageViewer v-if="preview?.kind === 'image'" v-model:open="previewOpen" :src="preview.url" :label="preview.name" />
@@ -289,9 +314,11 @@ async function confirmDelete() {
 
 <style scoped>
 .material-browser { display: grid; align-content: start; min-width: 0; gap: 12px; }
-.material-panel { padding: 16px; }
-.material-kind-tabs { display: flex; gap: 22px; margin: -9px -16px 0; border-block-end: 1px solid var(--ui-border); padding-inline: 16px; }
-.material-kind { border-block-end: 2px solid transparent; padding: 10px 4px; color: var(--ui-text-muted); font-size: 14px; font-weight: 560; }
+.material-panel { gap: 0; }
+.material-panel .material-grid { padding: 0 20px 17px; }
+.material-display-toolbar { padding-block: 0 5px; }
+.material-kind-tabs { display: flex; gap: 13px; }
+.material-kind { border-block-end: 2px solid transparent; padding: 6px 4px; color: var(--ui-text-muted); font-size: 14px; font-weight: 560; }
 .material-kind[aria-pressed=true] { border-block-end-color: var(--ui-primary); color: var(--ui-primary); }
 .material-kind:not(:disabled):hover { color: var(--ui-primary); }
 .material-toolbar, .material-search, .material-views { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -300,6 +327,7 @@ async function confirmDelete() {
 .material-views { gap: 4px; }
 .material-meta, .material-pagination { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
 .material-meta { color: var(--ui-text-muted); font-size: 13px; }
+.material-library-meta { padding: 0 20px 8px; }
 .material-policy { margin-inline-start: auto; }
 .material-empty { display: grid; min-height: 128px; place-content: center; justify-items: center; gap: 9px; color: var(--ui-text-muted); font-size: 14px; border-top: 1px solid var(--ui-border); }
 .material-empty > :first-child { width: 30px; height: 30px; }
@@ -317,10 +345,9 @@ async function confirmDelete() {
 .material-caption { display: grid; gap: 2px; padding-top: 7px; }
 .material-caption strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .material-caption > span { color: var(--ui-text-muted); font-size: 13px; }
-.material-table-scroll { overflow-x: auto; }
-.material-table { border-collapse: collapse; width: 100%; min-width: 540px; text-align: start; font-size: 14px; }
-.material-table :is(th, td) { padding: 10px 12px; border-block-end: 1px solid var(--ui-border); white-space: nowrap; }
-.material-table th { color: var(--ui-text-muted); background: var(--ui-bg-elevated); font-weight: 650; }
+.material-table { min-width: 40rem; }
+.material-table :is(th, td) { white-space: nowrap; }
+.material-table-empty { text-align: center; }
 .material-table-name { display: flex; align-items: center; gap: 9px; max-width: 18rem; }
 .material-table-name img { flex: none; object-fit: contain; border-radius: 5px; background: var(--ui-bg-elevated); }
 .material-kind-icon { width: 34px; height: 34px; color: var(--ui-text-muted); flex: none; }

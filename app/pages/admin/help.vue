@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import ConsoleDataTable from '#qiandao-console/ConsoleDataTable.vue'
+// Keep pagination in this page when the optional private console is enabled.
+import ConsoleDataTable from '~/components/console/ConsoleDataTable.vue'
 import ConsoleFormActions from '#qiandao-console/ConsoleFormActions.vue'
 import ConsoleInput from '#qiandao-console/ConsoleInput.vue'
-import ConsolePageHeading from '#qiandao-console/ConsolePageHeading.vue'
+import ConsoleListPagination from '~/components/console/ConsoleListPagination.vue'
 import ConsoleDialog from '~/components/material/ConsoleDialog.vue'
 import { helpAnswerLength, helpQuestionLength, helpQuestionLimit, type HelpQuestion, type HelpSettings } from '#shared/help'
 
@@ -18,6 +19,17 @@ const columns = [
   { id: 'actions', header: '操作' },
 ]
 const items = computed(() => data.value?.items || [])
+const searchText = ref('')
+const term = ref('')
+const visible = computed(() => items.value.filter(item =>
+  [item.question, item.answer].some(text => text.toLocaleLowerCase().includes(term.value)),
+))
+const { page, pageSize, sizeOptions, pages, offset, pageRows, turn, resize } = useConsoleListPage(visible)
+
+function search() {
+  term.value = searchText.value.trim().toLocaleLowerCase()
+  page.value = 1
+}
 const editorOpen = ref(false)
 const deleting = ref<HelpQuestion>()
 const draft = ref<HelpQuestion>({ id: '', question: '', answer: '' })
@@ -53,8 +65,8 @@ async function update(next: HelpQuestion[], kind: 'save' | 'delete') {
   }
 }
 function save() {
-  const item = { ...draft.value, question: draft.value.question.trim(), answer: draft.value.answer.trim() }
-  if (!item.question || !item.answer) return
+  const item = { ...draft.value, question: draft.value.question.trim() }
+  if (!item.question || !item.answer.trim()) return
   const next = item.id ? items.value.map(row => row.id === item.id ? item : row) : [...items.value, item]
   return update(next, 'save')
 }
@@ -64,23 +76,35 @@ function remove() {
 </script>
 
 <template>
-  <div class="page-stack help-settings-page">
-    <div class="page-heading-row">
-      <ConsolePageHeading title="帮助中心" />
-      <UButton type="button" icon="i-lucide-plus" :disabled="items.length >= helpQuestionLimit || !!action" @click="edit()">新增问答</UButton>
-    </div>
-    <section class="panel help-table" aria-label="常见问题">
-      <ConsoleDataTable :data="items" :columns="columns" empty-title="暂无问答">
-        <template #position-cell="{ row }">{{ row.index + 1 }}</template>
-        <template #question-cell="{ row }"><strong class="help-question-text">{{ row.original.question }}</strong></template>
-        <template #answer-cell="{ row }"><span class="help-answer-preview">{{ row.original.answer }}</span></template>
-        <template #actions-cell="{ row }">
-          <div class="help-actions">
-            <UButton type="button" variant="link" size="sm" :disabled="!!action" @click="edit(row.original)">编辑</UButton>
-            <UButton type="button" variant="link" size="sm" color="error" :disabled="!!action" @click="askDelete(row.original)">删除</UButton>
-          </div>
-        </template>
-      </ConsoleDataTable>
+  <div class="page-stack">
+    <section class="panel list-panel" aria-labelledby="help-heading">
+      <header class="panel-toolbar list-heading">
+        <h1 id="help-heading" class="page-title">帮助中心</h1>
+        <UButton type="button" icon="i-lucide-plus" :disabled="items.length >= helpQuestionLimit || !!action" @click="edit()">新增问答</UButton>
+      </header>
+      <form class="panel-toolbar list-filters" @submit.prevent="search">
+        <UInput v-model="searchText" class="list-search" maxlength="160" aria-label="搜索问答" placeholder="问题或答案" />
+        <div class="toolbar-actions">
+          <UButton type="submit" icon="i-lucide-search">搜索</UButton>
+          <UButton type="button" variant="outline" color="neutral" icon="i-lucide-rotate-ccw"
+            :disabled="!searchText && !term && page === 1" @click="searchText = ''; search()">重置</UButton>
+        </div>
+      </form>
+      <div class="table-scroll list-table help-table">
+        <ConsoleDataTable :data="pageRows" :columns="columns" :empty-title="term ? '没有匹配的问答' : '暂无问答'">
+          <template #position-cell="{ row }">{{ offset + row.index + 1 }}</template>
+          <template #question-cell="{ row }"><strong class="help-question-text">{{ row.original.question }}</strong></template>
+          <template #answer-cell="{ row }"><span class="help-answer-preview">{{ row.original.answer }}</span></template>
+          <template #actions-cell="{ row }">
+            <div class="help-actions">
+              <UButton type="button" variant="ghost" size="sm" :disabled="!!action" @click="edit(row.original)">编辑</UButton>
+              <UButton type="button" variant="ghost" size="sm" color="error" :disabled="!!action" @click="askDelete(row.original)">删除</UButton>
+            </div>
+          </template>
+        </ConsoleDataTable>
+      </div>
+      <ConsoleListPagination label="帮助中心" :count="'共 ' + visible.length + ' 条问答'" :page="page" :pages="pages"
+        :page-size="pageSize" :size-options="sizeOptions" @resize="resize" @turn="turn" />
     </section>
 
     <ConsoleDialog v-model:open="editorOpen" :title="draft.id ? '编辑问答' : '新增问答'" size="form" :dismissible="!action" :close="!action">
@@ -122,10 +146,11 @@ function remove() {
 </template>
 
 <style scoped>
-.help-settings-page { width: min(100%, 55rem); margin-inline: auto; }
-.help-table { overflow: hidden; }
-.help-table :deep(table) { width: 100%; min-width: 480px; }
-.help-question-text { display: block; max-width: 16rem; white-space: normal; overflow-wrap: anywhere; }
-.help-answer-preview { display: block; max-width: 29rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-.help-actions { display: flex; flex-wrap: nowrap; }
+.help-table :deep(table) { width: 100%; min-width: 37rem; table-layout: fixed; }
+.help-table :deep(th:first-child) { width: 5rem; }
+.help-table :deep(th:nth-child(2)) { width: 23%; }
+.help-table :deep(th:last-child) { width: 9rem; }
+.help-question-text { display: block; white-space: normal; overflow-wrap: anywhere; }
+.help-answer-preview { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.help-actions { display: flex; gap: 3px; }
 </style>

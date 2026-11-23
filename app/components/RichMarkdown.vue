@@ -1,9 +1,10 @@
 <script lang="ts">
-import { defineComponent, h } from 'vue'
+import type { Token } from 'marked'
+import { defineComponent, h, type PropType } from 'vue'
 import { markdownNodes } from '#shared/markdown'
 
 export default defineComponent({
-  props: { source: { type: String, required: true }, privateMedia: Boolean },
+  props: { source: { type: [String, Array] as PropType<string | Token[]>, required: true }, privateMedia: Boolean },
   setup(props) {
     return () => h('div', { class: 'qm-markdown' }, markdownNodes(props.source, props.privateMedia))
   },

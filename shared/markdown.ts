@@ -69,7 +69,8 @@ function renderToken(input: Token, privateMedia: boolean, depth: number): VNodeC
   }
 }
 
-export function markdownNodes(source: string, privateMedia = false): VNodeChild[] {
+export function markdownNodes(source: string | Token[], privateMedia = false): VNodeChild[] {
+  if (typeof source !== 'string') return renderTokens(source, privateMedia)
   try {
     return renderTokens(markdownTokens(source), privateMedia)
   } catch {

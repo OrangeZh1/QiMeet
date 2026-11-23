@@ -2,6 +2,7 @@
 import ConsoleDataTable from '#qiandao-console/ConsoleDataTable.vue'
 import ConsoleFormActions from '#qiandao-console/ConsoleFormActions.vue'
 import ConsoleInput from '#qiandao-console/ConsoleInput.vue'
+import ConsoleListPagination from '~/components/console/ConsoleListPagination.vue'
 import ConsoleSettingsField from '~/components/console/ConsoleSettingsField.vue'
 import ConsoleDialog from '~/components/material/ConsoleDialog.vue'
 import { adminUserDefaultPageSize, adminUserPageSizes, attendeePasswordMin, attendeePasswordMax, type AdminUserPage, type AdminUserRow, type ContactKind } from '#shared/attendee-account'
@@ -20,6 +21,7 @@ const searchText = ref('')
 const appliedSearch = ref('')
 const error = ref(initialError.value ? errorText(initialError.value, '暂时无法加载用户列表') : '')
 const pending = ref<'search' | 'reset' | 'previous' | 'next' | 'size' | 'background'>()
+const paging = computed(() => pending.value === 'previous' || pending.value === 'next' || pending.value === 'size' ? pending.value : undefined)
 const page = computed(() => result.value?.page ?? 1)
 const pageSize = computed(() => result.value?.pageSize ?? adminUserDefaultPageSize)
 const pages = computed(() => Math.max(1, Math.ceil((result.value?.total ?? 0) / pageSize.value)))
@@ -179,13 +181,13 @@ async function confirmAction() {
 
 <template>
   <div class="page-stack">
-    <section class="panel" aria-labelledby="users-heading">
-      <header class="panel-toolbar users-heading">
+    <section class="panel list-panel" aria-labelledby="users-heading">
+      <header class="panel-toolbar list-heading">
         <h1 id="users-heading" class="page-title">用户列表</h1>
         <UButton type="button" icon="i-lucide-user-plus" :disabled="!!pending" @click="openCreate">新增用户</UButton>
       </header>
-      <form class="panel-toolbar users-toolbar" @submit.prevent="load('search', searchText.trim())">
-        <UInput v-model="searchText" class="user-search" maxlength="254"
+      <form class="panel-toolbar list-filters" @submit.prevent="load('search', searchText.trim())">
+        <UInput v-model="searchText" class="list-search" maxlength="254"
           aria-label="搜索用户" placeholder="名称、手机号或邮箱" :readonly="!!pending" />
         <div class="toolbar-actions">
           <UButton type="submit" icon="i-lucide-search" :loading="pending === 'search'" :disabled="!!pending">搜索</UButton>
@@ -194,7 +196,7 @@ async function confirmAction() {
         </div>
       </form>
       <p v-if="error" class="feedback error panel-message" role="alert">{{ error }}</p>
-      <div class="table-scroll" :aria-busy="!!pending">
+      <div class="table-scroll list-table" :aria-busy="!!pending">
         <ConsoleDataTable :data="result?.rows ?? []" :columns="columns" :show-sequence="false" :client-pagination="false" :empty-title="emptyTitle">
           <template #sequence-cell="{ row }">{{ (page - 1) * pageSize + row.index + 1 }}</template>
           <template #avatarUrl-cell="{ row }">
@@ -222,18 +224,10 @@ async function confirmAction() {
           </template>
         </ConsoleDataTable>
       </div>
-      <footer class="panel-toolbar users-pagination">
-        <p class="help" role="status">{{ result ? '共 ' + result.total + ' 位用户' : '暂无统计' }}</p>
-        <nav class="toolbar-actions" aria-label="用户列表分页">
-          <AdminSelect :model-value="pageSize" :items="sizeOptions" size="sm" compact aria-label="每页条数"
-            :loading="pending === 'size'" :disabled="!result || !!pending" @update:model-value="setPageSize" />
-          <UButton type="button" color="neutral" variant="outline" size="sm" icon="i-lucide-chevron-left" aria-label="上一页"
-            :disabled="page <= 1 || !!pending" :loading="pending === 'previous'" @click="load('previous', appliedSearch, page - 1)" />
-          <span class="help users-page-number">第 {{ page }} / {{ pages }} 页</span>
-          <UButton type="button" color="neutral" variant="outline" size="sm" icon="i-lucide-chevron-right" aria-label="下一页"
-            :disabled="page >= pages || !!pending" :loading="pending === 'next'" @click="load('next', appliedSearch, page + 1)" />
-        </nav>
-      </footer>
+      <ConsoleListPagination label="用户列表" :count="result ? '共 ' + result.total + ' 位用户' : '暂无统计'"
+        :page="page" :pages="pages" :page-size="pageSize" :size-options="sizeOptions" :pending="paging"
+        :disabled="!result || !!pending" @resize="setPageSize"
+        @turn="load($event, appliedSearch, page + ($event === 'next' ? 1 : -1))" />
     </section>
     <ConsoleDialog v-model:open="createOpen" :title="editingUser ? '编辑用户' : '新增用户'"
       :dismissible="!savingUser && !avatarBusy" :close="!savingUser && !avatarBusy">
@@ -293,13 +287,7 @@ async function confirmAction() {
 </template>
 
 <style scoped>
-.users-heading { padding-bottom: 10px; }
-.users-toolbar { justify-content: flex-start; gap: 10px; padding-top: 5px; }
-.users-pagination { border-top: 1px solid var(--line); }
-.users-page-number { min-width: 4.5rem; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.user-search { flex: 0 1 18rem; min-width: 0; }
 .table-scroll :deep(table) { width: 100%; min-width: 46rem; table-layout: fixed; }
-.table-scroll :deep(th) { background: #f6f8fc; }
 .table-scroll :deep(th:first-child) { width: 5rem; }
 .table-scroll :deep(th:nth-child(2)) { width: 6rem; }
 .table-scroll :deep(th:nth-child(4)) { width: 9rem; }
@@ -314,7 +302,4 @@ async function confirmAction() {
 .user-fixed-field { display: flex; align-items: center; min-height: var(--qm-admin-control-height); font-size: 14px; }
 .create-user-form { --settings-label-width: 6.5rem; --settings-content-width: 21rem; gap: 13px; }
 .create-user-form :deep(.image-select-tile) { width: 76px; height: 76px; }
-@media (max-width: 520px) {
-  .user-search { flex-basis: 100%; }
-}
 </style>

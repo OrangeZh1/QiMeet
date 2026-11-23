@@ -110,6 +110,7 @@ async function verify() {
   }
   verifying.value = true
   verifyError.value = ''
+  const loginPath = route.fullPath
   try {
     await $fetch(usingCode.value ? '/api/account/verify' : '/api/account/password', {
       method: 'POST',
@@ -119,6 +120,7 @@ async function verify() {
         ...(usingPassword.value ? { password: password.value } : {}),
       },
     })
+    if (route.fullPath !== loginPath) return
     clearNuxtData(key => key.startsWith('attendee-'))
     await navigateTo(next.value, { replace: true })
   } catch (cause) {
@@ -129,7 +131,7 @@ async function verify() {
 }
 
 function submitAuth(event: SubmitEvent) {
-  if (wechatMode.value && policyAccepted.value) return
+  if (wechatMode.value && policyAccepted.value && !sending.value && !verifying.value) return
   event.preventDefault()
   if (!wechatMode.value) void verify()
 }
@@ -227,7 +229,7 @@ onBeforeUnmount(() => clearInterval(timer))
               和<NuxtLink :to="{ path: '/policies/terms', query: policyQuery }" target="_blank" rel="noopener">《用户协议》</NuxtLink>
             </div>
           </div>
-          <UButton type="submit" class="attendee-action client-auth-submit" :loading="verifying" :disabled="sending || !policyAccepted">
+          <UButton type="submit" class="attendee-action client-auth-submit" :loading="!wechatMode && verifying" :disabled="sending || verifying || !policyAccepted">
             {{ wechatMode ? '打开微信扫码' : heading }}
           </UButton>
         </form>
@@ -241,7 +243,10 @@ onBeforeUnmount(() => clearInterval(timer))
           <NuxtLink :to="accountLogin" replace>手机号或邮箱登录</NuxtLink>
         </p>
         <div v-if="!wechatMode && intent === 'login' && session?.wechat" class="client-wechat-row">
-          <NuxtLink class="client-wechat" :to="{ path: '/login', query: { next, mode: 'wechat' } }">
+          <span v-if="sending || verifying" class="client-wechat" aria-disabled="true">
+            <span class="client-wechat-icon"><img src="/brand/wechat.png" alt="" width="17" height="17" /></span> 微信扫码登录
+          </span>
+          <NuxtLink v-else class="client-wechat" :to="{ path: '/login', query: { next, mode: 'wechat' } }">
             <span class="client-wechat-icon"><img src="/brand/wechat.png" alt="" width="17" height="17" /></span> 微信扫码登录
           </NuxtLink>
         </div>

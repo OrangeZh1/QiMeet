@@ -134,11 +134,6 @@ export async function prepareQiSession(
   return () => setCookie(event, cookie, token, options)
 }
 
-export async function setSession(event: RequestEvent, kind: SessionKind, registrationId: number | null, eventId?: number, accountId?: number) {
-  const writeCookie = await transaction(db => prepareQiSession(event, kind, registrationId, db, eventId, accountId))
-  writeCookie()
-  if (randomBytes(1)[0] === 0) await mutate('DELETE FROM sessions WHERE expires_at<=UTC_TIMESTAMP(3) LIMIT 1000', [])
-}
 export async function clearQiSession(event: RequestEvent) {
   const token = getCookie(event, sessionCookie())
   if (token) await mutate("DELETE FROM sessions WHERE token_hash=? AND kind='admin'", [hash(token)])
@@ -159,8 +154,19 @@ export async function createPasswordHash(password: string) {
   const salt = randomBytes(16).toString('hex')
   return salt + ':' + (await scryptAsync(password, salt, 64) as Buffer).toString('hex')
 }
-export async function verifyAdmin(username: string, password: string) {
-  const account = await first<{ username: string, password_hash: string }>('SELECT username, password_hash FROM admin_account WHERE id=1')
+type AdminCredentials = { username: string, password_hash: string }
+
+export async function signInAdmin(event: RequestEvent, username: string, password: string) {
+  const credentials = 'SELECT username, password_hash FROM admin_account WHERE id=1'
+  const account = await first<AdminCredentials>(credentials)
   const stored = account?.password_hash || '0'.repeat(32) + ':' + '0'.repeat(128)
-  return Boolean(await verifyPassword(password, stored) && account && safeEqual(account.username, username))
+  const verified = await verifyPassword(password, stored)
+  if (!verified || !account || !safeEqual(account.username, username)) fail(401, '账号或密码有误')
+  const writeCookie = await transaction(async (db) => {
+    const current = await first<AdminCredentials>(credentials + ' FOR UPDATE', [], db)
+    if (current?.username !== account.username || current.password_hash !== account.password_hash) fail(401, '账号或密码有误')
+    return prepareQiSession(event, 'admin', null, db)
+  })
+  writeCookie()
+  if (randomBytes(1)[0] === 0) await mutate('DELETE FROM sessions WHERE expires_at<=UTC_TIMESTAMP(3) LIMIT 1000', [])
 }

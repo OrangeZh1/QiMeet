@@ -1,0 +1,42 @@
+name: 构建 QiMeet 生产制品
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.1'
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - name: 安装依赖并验证
+        run: |
+          pnpm install --frozen-lockfile
+          node --test test/auth-and-help.mjs
+      - name: 构建生产制品
+        run: |
+          pnpm build
+          test -f .output/server/index.mjs
+          node -e "require.resolve('mysql2/promise', { paths: [require('node:path').resolve('.output/server')] })"
+          printf '%s\n' "$GITHUB_SHA" > REVISION
+          tar --exclude='*.map' --exclude='*/test' --exclude='*/tests' --exclude='*/__tests__' \
+            --exclude='*/coverage' --exclude='*/.git' --exclude='*/.cache' \
+            -czf qimeet-linux.tar.gz .output database scripts/setup.mjs REVISION
+          sha256sum qimeet-linux.tar.gz > qimeet-linux.tar.gz.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qimeet-linux-${{ github.sha }}
+          path: |
+            qimeet-linux.tar.gz
+            qimeet-linux.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7

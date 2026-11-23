@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import ConsoleInput from '#qiandao-console/ConsoleInput.vue'
-import ConsolePageHeading from '#qiandao-console/ConsolePageHeading.vue'
 import ConsoleSettingsField from '~/components/console/ConsoleSettingsField.vue'
 import ActivityMarkdownEditor from '~/components/ActivityMarkdownEditor.vue'
 import { homeBannerLimit, type SiteSettings } from '#shared/site-settings'
@@ -88,11 +87,12 @@ async function save() {
 </script>
 
 <template>
-  <div class="page-stack site-settings-page">
-    <ConsolePageHeading :title="section.label" />
-    <form class="site-settings-form form-stack" @submit.prevent="save">
+  <form class="panel site-settings-form" aria-labelledby="site-settings-heading" @submit.prevent="save">
+      <header class="panel-toolbar">
+        <h1 id="site-settings-heading" class="page-title">{{ section.label }}</h1>
+      </header>
       <template v-if="section.id === 'brand'">
-        <section class="panel panel-content form-stack" aria-labelledby="site-info-heading">
+        <section class="settings-section form-stack" aria-labelledby="site-info-heading">
           <h2 id="site-info-heading" class="section-title">站点信息</h2>
           <ConsoleSettingsField label="站点名称" input-id="settings-site-name">
             <ConsoleInput id="settings-site-name" v-model="input.title" variant="none" maxlength="120" required :readonly="saving" />
@@ -113,7 +113,7 @@ async function save() {
               label="登录封面" hide-label :disabled="saving" @busy="pickerBusy.loginImageMaterialId = $event" />
           </ConsoleSettingsField>
         </section>
-        <section class="panel panel-content form-stack" aria-labelledby="site-banner-heading">
+        <section class="settings-section form-stack" aria-labelledby="site-banner-heading">
           <h2 id="site-banner-heading" class="section-title">活动首页</h2>
           <ConsoleSettingsField label="轮播图片">
             <EventCoverGallery :model-value="banners" label="Banner 图片" :limit="homeBannerLimit" wide :disabled="saving"
@@ -132,7 +132,7 @@ async function save() {
             </EventCoverGallery>
           </ConsoleSettingsField>
         </section>
-        <section id="site-filing" class="panel panel-content form-stack" aria-labelledby="site-filing-heading">
+        <section id="site-filing" class="settings-section form-stack" aria-labelledby="site-filing-heading">
           <h2 id="site-filing-heading" class="section-title">版权与备案</h2>
           <ConsoleSettingsField label="默认版权" input-id="settings-login-copyright">
             <ConsoleInput id="settings-login-copyright" v-model="input.loginCopyright" variant="none" maxlength="240" :readonly="saving" />
@@ -141,7 +141,7 @@ async function save() {
             <ConsoleInput id="settings-filing-number" v-model="input.filingNumber" variant="none" maxlength="120" :readonly="saving" />
           </ConsoleSettingsField>
         </section>
-        <section class="panel panel-content form-stack" aria-labelledby="site-user-login">
+        <section class="settings-section form-stack" aria-labelledby="site-user-login">
           <h2 id="site-user-login" class="section-title">用户登录</h2>
           <ConsoleSettingsField label="登录与注册">
             <div class="grid gap-3 pt-2">
@@ -150,7 +150,7 @@ async function save() {
             </div>
           </ConsoleSettingsField>
         </section>
-        <section class="panel panel-content form-stack" aria-labelledby="site-wechat">
+        <section class="settings-section form-stack" aria-labelledby="site-wechat">
           <h2 id="site-wechat" class="section-title">微信开放平台</h2>
           <ConsoleSettingsField label="扫码登录">
             <UCheckbox v-model="input.wechatLoginEnabled" label="启用微信扫码登录" class="pt-2" :disabled="saving" />
@@ -170,25 +170,25 @@ async function save() {
         </section>
       </template>
       <template v-else>
-        <section id="site-terms" class="panel panel-content form-stack" aria-label="用户协议">
+        <section id="site-terms" class="settings-section form-stack" aria-label="用户协议">
           <ActivityMarkdownEditor v-model="input.userAgreement" label="用户协议" placeholder="输入用户协议内容" :maxlength="30000"
             :allow-material-video="false" :disabled="saving" />
         </section>
-        <section id="site-privacy" class="panel panel-content form-stack" aria-label="隐私政策">
+        <section id="site-privacy" class="settings-section form-stack" aria-label="隐私政策">
           <ActivityMarkdownEditor v-model="input.privacyPolicy" label="隐私政策" placeholder="输入隐私政策内容" :maxlength="30000"
             :allow-material-video="false" :disabled="saving" />
         </section>
       </template>
-      <p v-if="failure || feedback" class="feedback" :class="{ error: !!failure }" :role="failure ? 'alert' : 'status'">{{ failure || feedback }}</p>
-      <div><UButton type="submit" icon="i-lucide-save" :loading="saving" :disabled="uploading">保存设置</UButton></div>
-    </form>
-  </div>
+      <footer class="panel-toolbar settings-actions">
+        <p v-if="failure || feedback" class="feedback" :class="{ error: !!failure }" :role="failure ? 'alert' : 'status'">{{ failure || feedback }}</p>
+        <UButton type="submit" icon="i-lucide-save" :loading="saving" :disabled="uploading">保存设置</UButton>
+      </footer>
+  </form>
 </template>
 
 <style scoped>
-.site-settings-page { width: min(100%, 55rem); margin-inline: auto; }
 .site-settings-form { --settings-label-width: 8rem; --settings-content-width: 24rem; }
-.site-settings-form :deep(.qisvc-console-settings-field) { width: min(100%, 33.5rem); margin-inline: auto; }
+.site-settings-form :deep(.qisvc-console-settings-field) { width: min(100%, 33.5rem); }
 .site-images { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .banner-text-fields { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px 8px; }
 .banner-text-fields > label { color: var(--ui-text-muted); font-size: 12px; font-weight: 500; white-space: nowrap; }

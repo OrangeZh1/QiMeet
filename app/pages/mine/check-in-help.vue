@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import RichMarkdown from '~/components/RichMarkdown.vue'
 import type { HelpContent } from '#shared/help'
+import { markdownParts } from '#shared/markdown-tokens'
 
 definePageMeta({ layout: false, pageTransition: false })
 useSeoMeta({ title: '帮助中心' })
 const { data, error } = await useFetch<HelpContent>('/api/site/check-in-help', {
   key: 'check-in-help', cache: 'no-store',
 })
+const parts = computed(() => data.value ? markdownParts([data.value.intro, ...data.value.items.map(item => item.answer)]) : [])
 </script>
 
 <template>
@@ -14,12 +16,12 @@ const { data, error } = await useFetch<HelpContent>('/api/site/check-in-help', {
     <article class="client-section check-in-help">
       <h1 class="sr-only">帮助中心</h1>
       <p v-if="error" class="attendee-error" role="alert">{{ errorText(error, '暂时无法读取签到帮助') }}</p>
-      <template v-else-if="data && (data.intro || data.items.length)">
-        <RichMarkdown v-if="data.intro" :source="data.intro" />
+      <template v-else-if="data && (data.intro.trim() || data.items.length)">
+        <RichMarkdown v-if="data.intro.trim()" :source="parts[0] ?? data.intro" />
         <div v-if="data.items.length" class="help-questions">
-          <details v-for="item in data.items" :key="item.id" class="help-question">
+          <details v-for="(item, index) in data.items" :key="item.id" class="help-question">
             <summary>{{ item.question }} <UIcon name="i-lucide-chevron-down" aria-hidden="true" /></summary>
-            <RichMarkdown class="help-answer" :source="item.answer" />
+            <RichMarkdown class="help-answer" :source="parts[index + 1] ?? item.answer" />
           </details>
         </div>
       </template>

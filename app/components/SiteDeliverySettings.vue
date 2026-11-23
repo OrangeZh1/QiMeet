@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import ConsoleInput from '#qiandao-console/ConsoleInput.vue'
-import ConsolePageHeading from '#qiandao-console/ConsolePageHeading.vue'
-import ConsoleFormActions from '#qiandao-console/ConsoleFormActions.vue'
 import ConsoleSettingsField from '~/components/console/ConsoleSettingsField.vue'
 import { deliveryCredentialFields, deliveryFields, deliverySecretLabels, type DeliveryChannel, type DeliveryKind, type DeliverySettingsView, type SmsProvider } from '#shared/delivery-settings'
 
@@ -61,10 +59,11 @@ async function save() {
 </script>
 
 <template>
-  <div class="page-stack delivery-settings-page" :class="{ 'delivery-email-page': !isSms }">
-    <ConsolePageHeading :title="title" />
-    <form class="form-stack" @submit.prevent="save">
-      <section class="panel panel-content form-stack" :aria-label="title">
+  <form class="panel delivery-settings-page" :class="{ 'delivery-email-page': !isSms }" aria-labelledby="delivery-settings-heading" @submit.prevent="save">
+      <header class="panel-toolbar">
+        <h1 id="delivery-settings-heading" class="page-title">{{ title }}</h1>
+      </header>
+      <div class="settings-section form-stack">
         <ConsoleSettingsField v-if="isSms" label="短信服务商" input-id="delivery-provider" required>
           <AdminSelect id="delivery-provider" v-model="provider" :items="options" :disabled="saving" size="md" />
           <p v-if="!channel" class="mt-2 text-xs text-muted">停用后，来宾无法通过短信获取验证码。</p>
@@ -87,22 +86,18 @@ async function save() {
               :placeholder="canKeepSecret(channel) ? '已配置，留空保留' : undefined" />
           </ConsoleSettingsField>
         </div>
+      </div>
+      <footer class="panel-toolbar settings-actions">
         <p v-if="failure || feedback" class="feedback" :class="{ error: !!failure }" :role="failure ? 'alert' : 'status'">{{ failure || feedback }}</p>
-        <ConsoleFormActions class="delivery-actions">
-          <UButton type="submit" icon="i-lucide-save" :loading="saving">保存设置</UButton>
-        </ConsoleFormActions>
-      </section>
-    </form>
-  </div>
+        <UButton type="submit" icon="i-lucide-save" :loading="saving">保存设置</UButton>
+      </footer>
+  </form>
 </template>
 
 <style scoped>
-.delivery-settings-page { width: min(100%, 55rem); margin-inline: auto; }
-.delivery-settings-page :deep(.qisvc-console-settings-field) { width: min(100%, 33.5rem); margin-inline: auto; --settings-content-width: 24rem; }
+.delivery-settings-page :deep(.qisvc-console-settings-field) { width: min(100%, 33.5rem); --settings-content-width: 24rem; }
 .delivery-fields { display: contents; }
-.delivery-actions { padding-top: 12px; }
-.delivery-email-page .delivery-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
-.delivery-email-page :is(.delivery-fields, .delivery-actions) { width: min(100%, 36rem); margin-inline: auto; }
+.delivery-email-page .delivery-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; width: min(100%, 36rem); }
 .delivery-email-page :deep(.qisvc-console-settings-field) { width: 100%; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 4px; }
 .delivery-email-page :deep(.qisvc-console-settings-label) { min-height: 0; justify-content: start; text-align: left; }
 @media (max-width: 540px) { .delivery-email-page .delivery-fields { grid-template-columns: minmax(0, 1fr); } }

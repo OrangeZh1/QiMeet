@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ConsoleDataTable from '#qiandao-console/ConsoleDataTable.vue'
+import ConsoleListPagination from './console/ConsoleListPagination.vue'
 import ConsoleDialog from './material/ConsoleDialog.vue'
 import type { AdminEvent, Registration, RegistrantRow } from '#shared/models'
 import { displayDate, isContentField } from '#shared/models'
@@ -24,10 +25,11 @@ const columns = [
   { accessorKey: 'version', header: '表单版本' }, { accessorKey: 'createdAt', header: '报名时间' },
   { id: 'checkins', header: '签到' }, { id: 'actions', header: '操作' },
 ]
-type ListAction = 'search' | 'reset' | 'page'
+type ListAction = 'search' | 'reset' | 'previous' | 'next'
 const selected = reactive({ q: '', checkpointId: 0, status: 'all' })
 const applied = ref({ ...selected })
-const busy = reactive({ search: false, reset: false, page: false })
+const busy = reactive({ search: false, reset: false, previous: false, next: false })
+const paging = computed(() => busy.previous ? 'previous' : busy.next ? 'next' : undefined)
 const page = ref(1)
 const pages = computed(() => Math.max(1, Math.ceil(result.value.total / 15)))
 const currentPoint = computed(() => props.event.checkpoints.find(point => point.id === applied.value.checkpointId))
@@ -176,27 +178,27 @@ const tableRows = computed(() => result.value.rows as unknown as Record<string, 
 
 <template>
   <div class="page-stack">
-    <section class="panel" aria-labelledby="registrant-list-heading">
-      <div class="panel-toolbar roster-heading">
+    <section class="panel list-panel" aria-labelledby="registrant-list-heading">
+      <header class="panel-toolbar list-heading">
         <div class="roster-title">
           <h2 id="registrant-list-heading" class="section-title">报名名单</h2>
           <p class="muted-text">报名 {{ event.registered }} 人 · 到场 {{ event.attended }} 人</p>
         </div>
-        <UButton type="button" color="neutral" variant="outline" icon="i-lucide-download" @click="openExports">导出</UButton>
-      </div>
-      <p v-if="error || notice" class="feedback roster-feedback" :class="{ error }" :role="error ? 'alert' : 'status'">{{ error || notice }}</p>
-      <form class="panel-toolbar roster-filters" @submit.prevent="search">
+        <UButton type="button" icon="i-lucide-download" @click="openExports">导出</UButton>
+      </header>
+      <form class="panel-toolbar list-filters" @submit.prevent="search">
         <div class="toolbar-actions">
           <UInput v-model="selected.q" maxlength="120" icon="i-lucide-search" aria-label="搜索姓名或手机号" placeholder="姓名或手机号" />
           <AdminSelect v-model="selected.checkpointId" :items="[{ label: '所有环节', value: 0 }, ...pointOptions]" compact size="md" aria-label="签到环节" />
           <AdminSelect v-model="selected.status" :items="stateOptions" compact size="md" aria-label="签到状态" />
         </div>
         <div class="toolbar-actions">
-          <UButton type="submit" :loading="busy.search">搜索</UButton>
-          <UButton type="button" color="neutral" variant="outline" :loading="busy.reset" @click="reset">重置</UButton>
+          <UButton type="submit" icon="i-lucide-search" :loading="busy.search">搜索</UButton>
+          <UButton type="button" color="neutral" variant="outline" icon="i-lucide-rotate-ccw" :loading="busy.reset" @click="reset">重置</UButton>
         </div>
       </form>
-      <div class="table-scroll">
+      <p v-if="error || notice" class="feedback panel-message" :class="{ error }" :role="error ? 'alert' : 'status'">{{ error || notice }}</p>
+      <div class="table-scroll list-table">
         <ConsoleDataTable :data="tableRows" :columns="columns" :show-sequence="false" :client-pagination="false" empty-title="暂无匹配的报名">
           <template #name-cell="{ row }">{{ registrationName(row.original) }}</template>
           <template #phone-cell="{ row }">{{ row.original.phone || '—' }}</template>
@@ -215,13 +217,8 @@ const tableRows = computed(() => result.value.rows as unknown as Record<string, 
           </template>
         </ConsoleDataTable>
       </div>
-      <div class="panel-toolbar">
-        <p class="help">共 {{ result.total }} 条 · 第 {{ page }} / {{ pages }} 页</p>
-        <div class="toolbar-actions">
-          <UButton color="neutral" variant="outline" :disabled="page <= 1 || busy.page" @click="load('page', page - 1)">上一页</UButton>
-          <UButton color="neutral" variant="outline" :disabled="page >= pages || busy.page" @click="load('page', page + 1)">下一页</UButton>
-        </div>
-      </div>
+      <ConsoleListPagination label="报名名单" :count="'共 ' + result.total + ' 条报名'" :page="page" :pages="pages"
+        :pending="paging" :disabled="busy.search || busy.reset" @turn="load($event, page + ($event === 'next' ? 1 : -1))" />
     </section>
     <form v-if="manual" class="panel panel-content form-stack reveal-panel" @submit.prevent="submitManual">
       <h2 class="section-title">人工补签 · {{ registrationName(manual) }}</h2>
@@ -291,10 +288,7 @@ const tableRows = computed(() => result.value.rows as unknown as Record<string, 
 </template>
 
 <style scoped>
-.roster-heading { padding-bottom: 8px; }
 .roster-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
-.roster-filters { padding-top: 8px; }
-.roster-feedback { margin: 0 20px 8px; }
 .export-row { display: flex; place-content: space-between; align-items: end; flex-wrap: wrap; gap: 8px; }
 .export-row h3 { font-size: 14px; font-weight: 650; }
 .export-version { flex: 1 1 10rem; max-width: 15rem; }

@@ -1,4 +1,4 @@
-import { Marked, type Token, type Tokens, type TokenizerExtension } from 'marked'
+import { Lexer, Marked, type Token, type Tokens, type TokenizerExtension } from 'marked'
 
 type VideoSource = { materialId: string } | { url: string }
 type VideoToken = Tokens.Generic & { type: 'qm_video', source?: VideoSource }
@@ -29,8 +29,27 @@ const nativeVideo: TokenizerExtension = {
 }
 
 const markdown = new Marked({ gfm: true, breaks: true, extensions: [nativeVideo] })
-export const markdownTokens = (source: string) => markdown.lexer(source.replace(/^\uFEFF/u, ''))
+const stripBom = (source: string) => source.replace(/^\uFEFF/u, '')
+export const markdownTokens = (source: string) => markdown.lexer(stripBom(source))
 export const isVideoToken = (token: Token): token is VideoToken => token.type === 'qm_video'
+
+export function markdownParts(sources: string[]): (string | Token[])[] {
+  try {
+    const parts = sources.map((source) => {
+      const lexer = new Lexer({ ...markdown.defaults })
+      return { lexer, tokens: lexer.blockTokens(stripBom(source).replace(/\r\n?/g, '\n')) }
+    })
+    // Resolve references after reading every block, keeping each part's own definitions first.
+    const links = Object.assign(Object.create(null), ...parts.slice().reverse().map(({ lexer }) => lexer.tokens.links))
+    return parts.map(({ lexer, tokens }) => {
+      lexer.tokens.links = Object.assign(Object.create(null), links, lexer.tokens.links)
+      for (const entry of lexer.inlineQueue) lexer.inlineTokens(entry.src, entry.tokens)
+      return tokens
+    })
+  } catch {
+    return sources
+  }
+}
 
 function inlineText(tokens: Token[], depth = 0): string {
   if (depth >= markdownDepthLimit) return ''
@@ -71,7 +90,7 @@ export function markdownQuestions(source: string) {
         intro += token.raw
       }
     }
-    return { intro: intro.trim(), items }
+    return { intro, items }
   } catch {
     return { intro: source, items: [] }
   }
