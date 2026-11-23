@@ -3,7 +3,7 @@ import ConsoleDataTable from '#qiandao-console/ConsoleDataTable.vue'
 import ConsoleListPagination from './console/ConsoleListPagination.vue'
 import ConsoleDialog from './material/ConsoleDialog.vue'
 import type { AdminEvent, Registration, RegistrantRow } from '#shared/models'
-import { displayDate, isContentField } from '#shared/models'
+import { displayDate, isContentField, registrationContactField } from '#shared/models'
 
 type List = { total: number, rows: RegistrantRow[] }
 type AuditEntry = { id: number, version: number, rowCount: number, createdAt: string }
@@ -169,6 +169,21 @@ async function exportFull() {
   finally { exporting.value = false }
 }
 const registrationName = (record: { id: number, name: string | null }) => record.name?.trim() || '报名 #' + record.id
+const detailContact = computed(() => {
+  const record = detail.value
+  const result = { name: '', phone: '', fields: record?.form.fields.filter(field => !isContentField(field.type)) || [] }
+  if (!record) return result
+  for (const role of ['name', 'phone'] as const) {
+    const field = registrationContactField(result.fields, role)
+    const value = field ? record.answers[field.id] : undefined
+    const answer = typeof value === 'string' ? value.trim() : ''
+    result[role] = record[role]?.trim() || answer
+    if (field && result[role] && (!answer || answer === result[role])) {
+      result.fields = result.fields.filter(item => item.id !== field.id)
+    }
+  }
+  return result
+})
 const fieldValue = (value: string | string[] | undefined) => Array.isArray(value) ? value.join('、') : value || '—'
 const visibleAttendance = (row: RegistrantRow) => currentPoint.value
   ? row.attendance.filter(point => point.id === currentPoint.value?.id)
@@ -229,24 +244,37 @@ const tableRows = computed(() => result.value.rows as unknown as Record<string, 
       </div>
     </form>
     <section v-if="detail" class="panel panel-content form-stack reveal-panel">
-      <div class="split-row"><h2 class="section-title">{{ registrationName(detail) }} · 报名详情</h2><UButton color="neutral" variant="ghost" @click="detail = undefined">关闭详情</UButton></div>
-      <dl class="detail-list">
-        <div><dt>报名手机号</dt><dd>{{ detail.phone || '—' }}</dd></div>
-        <div><dt>表单版本</dt><dd>V{{ detail.form.version }}</dd></div>
-        <div><dt>报名时间</dt><dd>{{ displayDate(detail.createdAt) }}</dd></div>
-        <div><dt>修改次数</dt><dd>{{ detail.edits }}</dd></div>
-        <div v-for="field in detail.form.fields.filter(field => !isContentField(field.type))" :key="field.id">
-          <dt>{{ field.label }}</dt>
-          <dd v-if="field.type === 'file' || field.type === 'image'">
-            <a v-for="file in detail.attachments.filter(file => file.fieldId === field.id)" :key="file.id" class="breadcrumb-link" :href="'/api/manage/attachment?eventId=' + eventId + '&id=' + detail.id + '&attachmentId=' + file.id" download>{{ file.filename }}</a>
-            <span v-if="!detail.attachments.some(file => file.fieldId === field.id)">—</span>
-          </dd>
-          <dd v-else>{{ fieldValue(detail.answers[field.id]) }}</dd>
-        </div>
-      </dl>
-      <ul class="toolbar-actions">
-        <li v-for="point in detail.attendance" :key="point.id" class="state-pill" :class="{ live: point.checkedAt }">{{ point.title }} · {{ point.checkedAt ? displayDate(point.checkedAt) : '未签到' }}</li>
-      </ul>
+      <div class="split-row"><h2 class="section-title">报名详情</h2><UButton color="neutral" variant="ghost" @click="detail = undefined">关闭详情</UButton></div>
+      <section v-if="detailContact.name || detailContact.phone || detailContact.fields.length" class="registrant-detail-group">
+        <h3>报名资料</h3>
+        <dl class="detail-list">
+          <div v-if="detailContact.name"><dt>姓名</dt><dd>{{ detailContact.name }}</dd></div>
+          <div v-if="detailContact.phone"><dt>手机号</dt><dd>{{ detailContact.phone }}</dd></div>
+          <div v-for="field in detailContact.fields" :key="field.id">
+            <dt>{{ field.label }}</dt>
+            <dd v-if="field.type === 'file' || field.type === 'image'">
+              <a v-for="file in detail.attachments.filter(file => file.fieldId === field.id)" :key="file.id" class="breadcrumb-link" :href="'/api/manage/attachment?eventId=' + eventId + '&id=' + detail.id + '&attachmentId=' + file.id" download>{{ file.filename }}</a>
+              <span v-if="!detail.attachments.some(file => file.fieldId === field.id)">—</span>
+            </dd>
+            <dd v-else>{{ fieldValue(detail.answers[field.id]) }}</dd>
+          </div>
+        </dl>
+      </section>
+      <section class="registrant-detail-group">
+        <h3>报名信息</h3>
+        <dl class="detail-list">
+          <div><dt>报名编号</dt><dd>#{{ detail.id }}</dd></div>
+          <div><dt>表单版本</dt><dd>V{{ detail.form.version }}</dd></div>
+          <div><dt>报名时间</dt><dd>{{ displayDate(detail.createdAt) }}</dd></div>
+          <div><dt>修改次数</dt><dd>{{ detail.edits }}</dd></div>
+        </dl>
+      </section>
+      <section v-if="detail.attendance.length" class="registrant-detail-group">
+        <h3>签到情况</h3>
+        <ul class="toolbar-actions">
+          <li v-for="point in detail.attendance" :key="point.id" class="state-pill" :class="{ live: point.checkedAt }">{{ point.title }} · {{ point.checkedAt ? displayDate(point.checkedAt) : '未签到' }}</li>
+        </ul>
+      </section>
     </section>
     <ConsoleDialog v-model:open="exportOpen" title="导出报名名单" :dismissible="!exporting" :close="!exporting">
       <template #body>
@@ -289,6 +317,9 @@ const tableRows = computed(() => result.value.rows as unknown as Record<string, 
 
 <style scoped>
 .roster-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.registrant-detail-group { display: grid; gap: 8px; }
+.registrant-detail-group + .registrant-detail-group { border-top: 1px solid var(--line); padding-top: 14px; }
+.registrant-detail-group h3 { font-size: 14px; font-weight: 650; }
 .export-row { display: flex; place-content: space-between; align-items: end; flex-wrap: wrap; gap: 8px; }
 .export-row h3 { font-size: 14px; font-weight: 650; }
 .export-version { flex: 1 1 10rem; max-width: 15rem; }

@@ -21,6 +21,16 @@ export const legacyContactFields: Field[] = [
   { id: 'a1cbd416-0471-4b83-a062-556ef6568ec1', type: 'text', label: '姓名', required: true, options: [], contactRole: 'name' },
   { id: '2581e68f-de20-4de9-8ae8-74ffa4b86d90', type: 'phone', label: '报名手机号', required: true, options: [], contactRole: 'phone' },
 ]
+const registrationContactLabels = {
+  name: ['姓名', '报名姓名', '真实姓名', '参会人姓名', '来宾姓名'],
+  phone: ['手机号', '手机号码', '报名手机号', '联系电话', '联系手机'],
+}
+export function registrationContactField(fields: Field[], role: 'name' | 'phone') {
+  const candidates = fields.filter(field => field.type === 'text' || (role === 'phone' && field.type === 'phone'))
+  return candidates.find(field => field.contactRole === role)
+    ?? candidates.find(field => registrationContactLabels[role].includes(field.label.trim()))
+    ?? candidates.find(field => field.smsRole === role)
+}
 export type QrMode = 'fixed' | 'dynamic' | 'both'
 export type EditMode = 'off' | 'once' | 'unlimited'
 export type EditDeadline = 'registration' | 'manual'

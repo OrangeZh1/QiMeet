@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto'
 import type { PoolConnection } from 'mysql2/promise'
-import type { AdminEvent } from '#shared/models'
+import type { AdminEvent, FormVersion } from '#shared/models'
 import { markdownVideoIds } from '#shared/markdown-tokens'
-import { checkinSourceLabels, displayDate, isContentField, isFileField } from '#shared/models'
+import { checkinSourceLabels, displayDate, isContentField, isFileField, registrationContactField } from '#shared/models'
 
 function coverInput(input: Record<string, unknown>): string[] | undefined {
   if (input.coverMaterialIds === undefined && input.coverMaterialId === undefined) return undefined
@@ -126,6 +126,17 @@ export async function saveCheckpoint(eventId: number, input: Record<string, unkn
   })
 }
 
+function rosterContactColumn(forms: FormVersion[], role: 'name' | 'phone') {
+  const stored = 'r.' + role
+  const sources = forms.flatMap(form => {
+    const field = registrationContactField(form.fields, role)
+    return field ? [[form.id, '$.' + JSON.stringify(field.id)]] : []
+  })
+  if (!sources.length) return { sql: stored, args: [] }
+  const cases = sources.map(() => "WHEN ? THEN NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r.answers, ?))), '')").join(' ')
+  return { sql: `COALESCE(NULLIF(CONVERT(${stored} USING utf8mb4) COLLATE utf8mb4_bin, ''), CASE r.form_id ${cases} END)`, args: sources.flat() }
+}
+
 export async function listRegistrations(eventId: number, query: Record<string, unknown>) {
   await conferenceById(eventId)
   const term = text(query.q, 120, '搜索条件', false)
@@ -133,11 +144,14 @@ export async function listRegistrations(eventId: number, query: Record<string, u
   const pointId = query.checkpointId ? positive(query.checkpointId) : null
   const status = oneOf(query.status || 'all', ['all', 'checked', 'pending'], '签到状态')
   if (pointId) await checkpointFor(eventId, pointId)
+  const forms = await formsFor(eventId)
+  const rosterName = rosterContactColumn(forms, 'name')
+  const rosterPhone = rosterContactColumn(forms, 'phone')
   const where = ['r.event_id=?']
   const args: unknown[] = [eventId]
   if (term) {
-    where.push('(LOCATE(?,r.name)>0 OR LOCATE(?,r.phone)>0)')
-    args.push(term, term)
+    where.push(`(LOCATE(?,${rosterName.sql})>0 OR LOCATE(?,${rosterPhone.sql})>0)`)
+    args.push(term, ...rosterName.args, term, ...rosterPhone.args)
   }
   if (status !== 'all') {
     where.push((status === 'pending' ? 'NOT ' : '') + 'EXISTS (SELECT 1 FROM checkins c WHERE c.registration_id=r.id' + (pointId ? ' AND c.checkpoint_id=?' : '') + ')')
@@ -145,8 +159,9 @@ export async function listRegistrations(eventId: number, query: Record<string, u
   }
   const condition = ' FROM registrations r JOIN form_versions f ON f.id=r.form_id WHERE ' + where.join(' AND ')
   const [results, count] = await Promise.all([
-    rows<{ id: number, name: string, phone: string, createdAt: string, version: number, edits: number }>(
-      'SELECT r.id,r.name,r.phone,r.created_at AS createdAt,r.edits,f.version' + condition + ' ORDER BY r.id DESC LIMIT 15 OFFSET ?', [...args, (page - 1) * 15],
+    rows<{ id: number, name: string | null, phone: string | null, createdAt: string, version: number, edits: number }>(
+      `SELECT r.id,${rosterName.sql} AS name,${rosterPhone.sql} AS phone,r.created_at AS createdAt,r.edits,f.version` + condition + ' ORDER BY r.id DESC LIMIT 15 OFFSET ?',
+      [...rosterName.args, ...rosterPhone.args, ...args, (page - 1) * 15],
     ),
     first<{ total: number }>('SELECT COUNT(*) AS total' + condition, args),
   ])

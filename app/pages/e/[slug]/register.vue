@@ -118,9 +118,6 @@ async function copy() {
 
       <section v-else-if="data?.registrationOpen" class="signup-entry" aria-labelledby="attendee-register-heading">
         <h1 id="attendee-register-heading" class="attendee-form-event-title">{{ data.conference.title }}</h1>
-        <p v-if="data.conference.registrationSms" class="attendee-helper signup-sms-hint">
-          报名短信发送到表单填写的手机号。已绑定手机号时，须与<a href="/mine/profile?edit=phone" target="_blank" rel="noopener" class="attendee-inline-link">个人资料</a>中的已验证号码一致；仅绑定邮箱时，以表单填写的手机号为准。
-        </p>
         <AttendeeForm v-if="data.signedIn" :slug="slug" :form="data.form" fixed-submit @saved="saved" />
       </section>
 
@@ -134,7 +131,6 @@ async function copy() {
 </template>
 
 <style scoped>
-.signup-sms-hint { padding: 12px var(--attendee-form-gutter) 0; }
 .signup-receipt-heading { display: flex; align-items: center; gap: 12px; }
 .signup-receipt-heading .attendee-result-icon { flex: none; width: 44px; height: 44px; font-size: 23px; }
 .signup-receipt-heading .attendee-subheading { margin-top: 2px; }
