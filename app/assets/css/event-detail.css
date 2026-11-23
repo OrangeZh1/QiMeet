@@ -9,8 +9,6 @@
   color: #151a25;
 }
 .attendee-shell--event .attendee-top { border-color: var(--event-line); }
-.attendee-shell--event .attendee-top-back { -webkit-tap-highlight-color: transparent; }
-.attendee-shell--event .attendee-top-back:hover { background: transparent; }
 .attendee-shell--event .attendee-top-inner {
   width: min(100%, var(--event-width));
   min-height: 56px;

@@ -291,7 +291,6 @@ onBeforeUnmount(() => clearInterval(timer))
   background: #f3f6fa;
 }
 .client-auth-back { position: absolute; inset: 4px auto auto 6px; color: white; }
-.client-auth-back:hover { background: #ffffff26; }
 .client-auth-back:focus-visible { outline-color: white; outline-offset: -3px; }
 .client-auth { display: grid; width: min(100%, var(--qm-attendee-page-width)); margin-inline: auto; padding-bottom: 24px; }
 .client-auth-hero { min-height: 164px; isolation: isolate; position: relative; overflow: hidden; background: #132d58; }
