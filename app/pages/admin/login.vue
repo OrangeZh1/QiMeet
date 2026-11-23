@@ -68,7 +68,7 @@ async function login() {
           </form>
         </section>
       </div>
-      <SiteFooter class="login-footer" :copyright-text="site.loginCopyright" />
+      <SiteFooter class="login-footer" :copyright-text="site.loginCopyright" filing-only />
     </div>
   </main>
 </template>
