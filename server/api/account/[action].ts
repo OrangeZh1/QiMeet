@@ -16,11 +16,11 @@ export default defineEventHandler(async (event) => {
     if (action === 'wechat-callback') return finishWechat(event)
     if (action === 'registrations') {
       const account = await requireAttendeeAccount(event)
-      return listAccountRegistrations(account.id)
+      return listAccountRegistrations(event, account.id)
     }
     if (action === 'pending-check-ins') {
       const account = await requireAttendeeAccount(event)
-      return listAccountPendingCheckins(account.id)
+      return listAccountPendingCheckins(event, account.id)
     }
   }
   if (method === 'POST') {

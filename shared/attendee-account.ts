@@ -33,7 +33,7 @@ export const accountCookie = 'qm_account'
 export type AttendeeActivityCard = {
   slug: string, title: string, coverUrl: string | null, venue: string, startsAt: string, endsAt: string, registrationOpen: boolean,
 }
-export type AccountRegistration = AttendeeActivityCard & { registrationId: number, registeredAt: string, checkedIn: boolean }
+export type AccountRegistration = AttendeeActivityCard & { registrationId: number, registeredAt: string, checkedIn: boolean, recovered: boolean }
 export type AccountPendingCheckin = {
   eventSlug: string, eventTitle: string, checkpointId: number, checkpointTitle: string,
   startsAt: string, endsAt: string, directEnabled: boolean,

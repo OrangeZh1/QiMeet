@@ -1,6 +1,7 @@
 import type { PoolConnection } from 'mysql2/promise'
 import type { Attendance, Checkpoint, Conference, FormVersion } from '#shared/models'
 import type { AccountPendingCheckin, AccountRegistration, AttendeeActivityCard } from '#shared/attendee-account'
+import type { RequestEvent } from './security'
 
 type ConferenceRow = Omit<Conference, 'coverImages'> & { coverIds: string | null }
 const eventColumns = "id,slug,title,organizer,venue,cover_url AS coverUrl,cover_material_id AS coverMaterialId,description,agenda,registration_closed_at AS registrationClosedAt,ended_at AS endedAt,starts_at AS startsAt,ends_at AS endsAt,registration_starts_at AS registrationStartsAt,registration_ends_at AS registrationEndsAt,published,registration_sms AS registrationSms,edit_policy AS editPolicy,edit_deadline AS editDeadline,(SELECT GROUP_CONCAT(ec.material_id ORDER BY ec.position) FROM event_covers ec WHERE ec.event_id=e.id) AS coverIds"
@@ -61,26 +62,29 @@ export async function listPublicActivities() {
   return cards.map(cardDates)
 }
 
-export async function listAccountRegistrations(accountId: number) {
+export async function listAccountRegistrations(event: RequestEvent, accountId: number) {
+  const scope = await attendeeRegistrationScope(event, accountId)
   const cards = await rows<AccountRegistration>(
     'SELECT ' + cardColumns + ',r.id AS registrationId,r.created_at AS registeredAt,' +
+    'NOT (r.account_id <=> ?) AS recovered,' +
     'EXISTS(SELECT 1 FROM checkins c WHERE c.registration_id=r.id) AS checkedIn ' +
-    'FROM registrations r JOIN events e ON e.id=r.event_id WHERE r.account_id=? AND e.published=1 AND e.deleted_at IS NULL ' +
+    'FROM registrations r JOIN events e ON e.id=r.event_id WHERE ' + scope.where + ' AND e.published=1 AND e.deleted_at IS NULL ' +
     'ORDER BY r.created_at DESC,r.id DESC',
-    [accountId],
+    [accountId, ...scope.params],
   )
-  return cards.map(card => ({ ...cardDates(card), registeredAt: iso(card.registeredAt), checkedIn: Boolean(card.checkedIn) }))
+  return cards.map(card => ({ ...cardDates(card), registeredAt: iso(card.registeredAt), checkedIn: Boolean(card.checkedIn), recovered: Boolean(card.recovered) }))
 }
 
-export async function listAccountPendingCheckins(accountId: number) {
+export async function listAccountPendingCheckins(event: RequestEvent, accountId: number) {
+  const scope = await attendeeRegistrationScope(event, accountId)
   const items = await rows<AccountPendingCheckin>(
     'SELECT e.slug AS eventSlug,e.title AS eventTitle,p.id AS checkpointId,p.title AS checkpointTitle,' +
     'p.starts_at AS startsAt,p.ends_at AS endsAt,p.direct_enabled AS directEnabled ' +
     'FROM registrations r JOIN events e ON e.id=r.event_id JOIN checkpoints p ON p.event_id=e.id ' +
-    'WHERE r.account_id=? AND e.published=1 AND e.deleted_at IS NULL AND e.ended_at IS NULL AND p.ends_at>UTC_TIMESTAMP(3) ' +
+    'WHERE ' + scope.where + ' AND e.published=1 AND e.deleted_at IS NULL AND e.ended_at IS NULL AND p.ends_at>UTC_TIMESTAMP(3) ' +
     'AND NOT EXISTS (SELECT 1 FROM checkins c WHERE c.registration_id=r.id AND c.checkpoint_id=p.id) ' +
     'ORDER BY p.starts_at,p.id',
-    [accountId],
+    scope.params,
   )
   return items.map(item => ({ ...item, startsAt: iso(item.startsAt), endsAt: iso(item.endsAt), directEnabled: Boolean(item.directEnabled) }))
 }

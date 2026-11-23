@@ -32,6 +32,7 @@ const heading = ref<HTMLElement>()
 async function recovered(registration: Registration) {
   data.value = { registration }
   if (event.value) event.value = { ...event.value, recognized: true }
+  clearNuxtData(['attendee-account-registrations', 'attendee-pending-checkins'])
   status.value = '已找回报名记录。'
   await navigateTo(path + '/record', { replace: true })
   void nextTick(() => heading.value?.focus())

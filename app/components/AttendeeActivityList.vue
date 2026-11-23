@@ -15,7 +15,7 @@ defineProps<{ items: (AttendeeActivityCard | AccountRegistration)[], recover?: b
           <div class="client-activity-meta">
             <time :datetime="event.startsAt">{{ displayDate(event.startsAt) }}</time>
             <span v-if="'registrationId' in event" class="attendee-label" :class="{ done: event.checkedIn }">
-              {{ event.checkedIn ? '已签到' : '已报名' }}
+              {{ event.checkedIn ? '已签到' : event.recovered ? '已找回' : '已报名' }}
             </span>
             <span v-else-if="!recover && event.registrationOpen" class="attendee-label done">报名开放</span>
           </div>

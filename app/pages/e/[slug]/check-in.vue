@@ -44,7 +44,7 @@ function recovered(registration: Registration) {
   }
   switching.value = false
   error.value = ''
-  clearNuxtData('attendee-record:' + slug)
+  clearNuxtData(['attendee-record:' + slug, 'attendee-account-registrations', 'attendee-pending-checkins'])
   void nextTick(() => resultHeading.value?.focus())
 }
 

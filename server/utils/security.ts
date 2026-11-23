@@ -119,6 +119,23 @@ export async function findQiSession(event: RequestEvent, eventId?: number, accou
     [eventId, accountId],
   )
 }
+
+export async function attendeeRegistrationScope(event: RequestEvent, accountId: number) {
+  const proofs = Object.entries(parseCookies(event)).flatMap(([name, token]) => {
+    const eventId = /^qm_e_([1-9]\d{0,9})$/.exec(name)?.[1]
+    return eventId && /^[a-zA-Z0-9_-]{43}$/.test(token) ? [[Number(eventId), hash(token)] as const] : []
+  })
+  if (!proofs.length) return { where: 'r.account_id=?', params: [accountId] }
+  const recovered = await rows<{ eventId: number, registrationId: number }>(
+    'SELECT r.event_id AS eventId,r.id AS registrationId FROM sessions s JOIN registrations r ON r.id=s.registration_id ' +
+    "WHERE s.account_id=? AND s.kind IN ('attendee','checkin') AND s.expires_at>UTC_TIMESTAMP(3) " +
+    'AND (r.event_id,s.token_hash) IN (' + proofs.map(() => '(?,?)').join(',') + ')', [accountId, ...proofs.flat()])
+  if (!recovered.length) return { where: 'r.account_id=?', params: [accountId] }
+
+  const placeholders = recovered.map(() => '?').join(',')
+  return { where: '(r.id IN (' + placeholders + ') OR (r.account_id=? AND r.event_id NOT IN (' + placeholders + ')))',
+    params: [...recovered.map(item => item.registrationId), accountId, ...recovered.map(item => item.eventId)] }
+}
 export async function prepareQiSession(
   event: RequestEvent, kind: SessionKind, registrationId: number | null,
   db: PoolConnection, eventId?: number, accountId?: number,
