@@ -153,8 +153,8 @@ export async function readSitePolicy(kind: SitePolicyKind): Promise<SitePolicy> 
 }
 
 export async function readSiteImage(event: RequestEvent, kind: SiteImageKind) {
-  const material = await first<{ mime: string, payload: Buffer }>(
-    'SELECT m.mime,m.payload FROM site_settings s JOIN materials m ON m.id=s.' + imageColumns[kind] +
+  const material = await first<{ id: string, digest: string, mime: string, payload: Buffer }>(
+    'SELECT m.id,m.digest,m.mime,m.payload FROM site_settings s JOIN materials m ON m.id=s.' + imageColumns[kind] +
     " WHERE s.id=1 AND m.kind='image'",
   )
   if (!material) fail(404, '找不到该站点图片')
@@ -163,5 +163,6 @@ export async function readSiteImage(event: RequestEvent, kind: SiteImageKind) {
     'x-content-type-options': 'nosniff',
     'content-security-policy': "default-src 'none'; sandbox",
   })
+  if (imageNotModified(event, material.digest, getQuery(event).v === material.id)) return null
   return material.payload
 }

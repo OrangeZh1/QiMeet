@@ -57,6 +57,8 @@ const avatarInput = ref<HTMLInputElement>()
 const nameBusy = ref(false)
 const avatarBusy = ref(false)
 const passwordBusy = ref(false)
+const wechatBusy = ref(false)
+const wechatError = ref('')
 const quitting = ref(false)
 const logoutOpen = ref(false)
 const nameError = ref('')
@@ -159,6 +161,21 @@ async function logout() {
     quitting.value = false
   }
 }
+
+async function bindWechat() {
+  if (wechatBusy.value || !session.value?.wechat || profile.value?.wechatLinked) return
+  wechatBusy.value = true
+  wechatError.value = ''
+  const profilePath = route.fullPath
+  try {
+    const { authorizationUrl } = await $fetch<{ authorizationUrl: string }>('/api/account/wechat-link', { method: 'POST', mode: 'cors', timeout: 12000 })
+    if (route.fullPath === profilePath) await navigateTo(authorizationUrl, { external: true })
+  } catch (cause) {
+    wechatError.value = errorText(cause, '暂时无法打开微信扫码，请重试')
+  } finally {
+    wechatBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -220,7 +237,21 @@ async function logout() {
                 <UIcon name="i-lucide-chevron-right" aria-hidden="true" />
               </span>
             </NuxtLink>
+            <div v-if="profile.wechatLinked" class="account-row">
+              <span>微信</span><span class="account-row-end">已绑定</span>
+            </div>
+            <button v-else-if="session?.wechat" type="button" class="account-row" :disabled="wechatBusy || quitting" @click="bindWechat">
+              <span>绑定微信</span>
+              <span class="account-row-end">
+                <span v-if="wechatBusy" role="status">正在打开微信…</span>
+                <UIcon v-else name="i-lucide-chevron-right" aria-hidden="true" />
+              </span>
+            </button>
           </div>
+          <p v-if="wechatError || route.query.wechat === 'conflict' || route.query.wechat === 'failed'" class="attendee-error" role="alert">
+            {{ wechatError || (route.query.wechat === 'conflict' ? '微信或当前账号已有绑定，无法继续。' : '微信授权未完成，请重试。') }}
+          </p>
+          <p v-else-if="route.query.wechat === 'linked' && profile.wechatLinked" class="attendee-notice" role="status">微信已绑定，下次扫码可登录此账号。</p>
           <button type="button" class="account-logout" @click="logoutOpen = true">退出登录</button>
         </template>
         <form v-else-if="mode === 'name'" class="profile-card attendee-input-form" @submit.prevent="saveName">

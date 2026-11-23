@@ -21,7 +21,7 @@ jobs:
       - name: 安装依赖并验证
         run: |
           pnpm install --frozen-lockfile
-          node --test test/auth-and-help.mjs test/registration-migration.mjs test/registration-notifications.mjs
+          node --test test/auth-and-help.mjs test/registration-migration.mjs test/registration-notifications.mjs test/wechat-link.mjs
       - name: 构建生产制品
         run: |
           pnpm build
@@ -51,7 +51,10 @@ jobs:
           NITRO_HOST=127.0.0.1 NITRO_PORT=3086 node "$smoke/.output/server/index.mjs" > "$smoke/startup.log" 2>&1 &
           pid=$!
           for attempt in {1..30}; do
-            if curl --silent --fail --output /dev/null http://127.0.0.1:3086/brand/favicon.png; then exit 0; fi
+            if curl --silent --fail --dump-header "$smoke/headers" --output /dev/null http://127.0.0.1:3086/brand/favicon.png; then
+              grep -qi '^cache-control:.*max-age=3600' "$smoke/headers"
+              exit 0
+            fi
             if ! kill -0 "$pid" 2>/dev/null; then break; fi
             sleep 1
           done

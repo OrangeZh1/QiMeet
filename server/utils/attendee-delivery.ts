@@ -22,9 +22,24 @@ export async function attendeeCodeDelivery(kind: ContactKind): Promise<(identifi
       connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 10000,
     })
     return async (to, code) => {
+      if (!/^\d{6}$/.test(code)) throw new Error('Invalid verification code')
       await transport.sendMail({
-        from, to, subject: 'QiMeet 验证码',
-        text: '您的 QiMeet 验证码是 ' + code + '，5 分钟内有效。',
+        from, to, subject: 'QiMeet 邮箱验证码',
+        text: `您的 QiMeet 验证码是 ${code}。\n\n验证码 5 分钟内有效，请勿转发。\n如果您没有发起本次操作，可以忽略此邮件。`,
+        html: `<!doctype html><html lang="zh-CN"><body style="margin:0;background:#f3f6fb;color:#182641;font-family:Arial,'Microsoft YaHei',sans-serif">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:24px 12px">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:440px;background:#fff;border:1px solid #dce4f0;border-radius:14px">
+              <tr><td style="padding:26px 22px">
+                <p style="margin:0;color:#2356bf;font-size:15px;font-weight:700">QiMeet</p>
+                <h1 style="margin:8px 0 12px;font-size:22px">邮箱验证码</h1>
+                <p style="margin:0;font-size:15px;line-height:1.6">请在 QiMeet 页面输入以下 6 位验证码。</p>
+                <p style="margin:16px 0;padding:14px 8px;background:#edf3ff;border-radius:9px;color:#163474;text-align:center;font-size:30px;font-family:monospace;font-weight:700;letter-spacing:5px">${code}</p>
+                <p style="margin:0 0 6px;font-size:14px;line-height:1.6"><strong>5 分钟内有效</strong>，请勿转发。</p>
+                <p style="margin:0;color:#52617a;font-size:13px;line-height:1.6">如果您没有发起本次操作，可以忽略此邮件。</p>
+              </td></tr>
+            </table>
+          </td></tr></table>
+        </body></html>`,
       })
     }
   }

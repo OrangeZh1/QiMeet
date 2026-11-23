@@ -31,6 +31,9 @@ export default defineNuxtConfig({
       meta: [{ name: 'theme-color', content: '#f4f7fd' }],
     },
   },
-  nitro: { preset: 'node-server' },
+  nitro: {
+    preset: 'node-server',
+    publicAssets: [{ dir: resolve(root, 'public/brand'), baseURL: '/brand', maxAge: 3600 }],
+  },
   devtools: { enabled: false },
 })

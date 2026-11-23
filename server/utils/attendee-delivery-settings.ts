@@ -36,7 +36,10 @@ function smsProvider(row: DeliveryRow): SmsProvider {
 
 function channelConfig<K extends DeliveryChannel>(row: DeliveryRow, channel: K): DeliveryConfig<K> {
   const encrypted = row[channel]
-  return encrypted ? JSON.parse(unseal(encrypted, 'site-delivery:' + channel).toString('utf8')) : environment[channel]()
+  const config: DeliveryConfig<K> = encrypted
+    ? JSON.parse(unseal(encrypted, 'site-delivery:' + channel).toString('utf8')) : environment[channel]()
+  if (channel === 'aliyun') config.secret = config.secret.trim()
+  return config
 }
 
 export async function activeSmsConfig() {
@@ -92,7 +95,8 @@ function validatedConfig(row: DeliveryRow, channel: DeliveryChannel, input: Reco
       ? previous.registrationTemplateMode || 'plain' : oneOf(input.registrationTemplateMode, registrationTemplateModes, '报名短信模板类型')
   }
   const credentialChanged = deliveryCredentialFields[channel].some(key => values[key] !== (current as Record<string, string>)[key])
-  const secret = input.secret === undefined || input.secret === '' ? (credentialChanged ? '' : current.secret) : input.secret
+  const suppliedSecret = input.secret === undefined || input.secret === '' ? (credentialChanged ? '' : current.secret) : input.secret
+  const secret = channel === 'aliyun' && typeof suppliedSecret === 'string' ? suppliedSecret.trim() : suppliedSecret
   if (typeof secret !== 'string' || !secret || secret.length > 512 || /[\x00-\x1f\x7f]/.test(secret)) {
     fail(400, '请填写有效的' + deliverySecretLabels[channel])
   }

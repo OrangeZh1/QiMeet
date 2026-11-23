@@ -6,7 +6,7 @@ import type { RequestEvent } from './security'
 type AccountRow = { id: number, kind: AttendeeAccount['kind'], identifier: string }
 type AccountProfile = { displayName: string, contactPhone: string | null, avatarMaterialId: string | null }
 type AccountAvatar = { id: number, avatarMaterialId: string | null, avatarRevision: number, hasOwnAvatar: number }
-type StoredProfile = AccountRow & AccountAvatar & { displayName: string, hasPassword: number, verifiedPhone: string | null, verifiedEmail: string | null }
+type StoredProfile = AccountRow & AccountAvatar & { displayName: string, hasPassword: number, verifiedPhone: string | null, verifiedEmail: string | null, wechatLinked: number }
 const options = () => ({ path: '/', httpOnly: true, secure: origin().startsWith('https:'), sameSite: 'lax' as const })
 
 export async function getAttendeeAccount(event: RequestEvent) {
@@ -14,7 +14,8 @@ export async function getAttendeeAccount(event: RequestEvent) {
   if (!token || !/^[a-zA-Z0-9_-]{43}$/.test(token)) return
   return first<StoredProfile>(
     'SELECT a.id,a.kind,a.identifier,a.display_name AS displayName,a.verified_phone AS verifiedPhone,a.verified_email AS verifiedEmail,a.avatar_material_id AS avatarMaterialId,' +
-    'a.avatar_revision AS avatarRevision,(a.avatar_mime IS NOT NULL) AS hasOwnAvatar,(a.password_hash IS NOT NULL) AS hasPassword ' +
+    'a.avatar_revision AS avatarRevision,(a.avatar_mime IS NOT NULL) AS hasOwnAvatar,(a.password_hash IS NOT NULL) AS hasPassword,' +
+    'EXISTS (SELECT 1 FROM attendee_wechat_links w WHERE w.account_id=a.id) AS wechatLinked ' +
     "FROM sessions s JOIN attendee_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.kind='account' AND s.expires_at>UTC_TIMESTAMP(3) AND a.disabled_at IS NULL",
     [hash(token)],
   )
@@ -42,6 +43,7 @@ export function attendeeProfileView(account: StoredProfile | undefined): Attende
     ...accountDisplay(account)!, displayName: account.displayName, avatarUrl: attendeeAvatarUrl(account),
     hasPassword: Boolean(account.hasPassword), contactPhone: attendeeContactPhone(account),
     contactPhoneVerified: Boolean(account.verifiedPhone), contactEmail: account.verifiedEmail,
+    wechatLinked: account.kind === 'wechat' || Boolean(account.wechatLinked),
   }
 }
 
@@ -75,13 +77,14 @@ export async function readAttendeeAvatar(event: RequestEvent) {
   const id = positive(getQuery(event).id)
   const account = await getAttendeeAccount(event)
   if (account?.id !== id) await assertAdmin(event)
-  const avatar = await first<{ mime: string | null, payload: Buffer | null }>(
-    "SELECT COALESCE(a.avatar_mime,m.mime) AS mime,COALESCE(a.avatar_payload,m.payload) AS payload " +
+  const avatar = await first<{ mime: string | null, payload: Buffer | null, revision: number }>(
+    "SELECT COALESCE(a.avatar_mime,m.mime) AS mime,COALESCE(a.avatar_payload,m.payload) AS payload,a.avatar_revision AS revision " +
     "FROM attendee_accounts a LEFT JOIN materials m ON m.id=a.avatar_material_id AND m.kind='image' WHERE a.id=?",
     [id],
   )
   if (!avatar?.mime || !avatar.payload) fail(404, '头像不存在')
   setResponseHeaders(event, { 'content-type': avatar.mime, 'content-security-policy': "default-src 'none'; sandbox" })
+  if (imageNotModified(event, `attendee-avatar-${id}-${avatar.revision}`, getQuery(event).v === String(avatar.revision), true)) return null
   return avatar.payload
 }
 
@@ -380,10 +383,44 @@ export async function saveAttendeePassword(event: RequestEvent, input: Record<st
   return { ok: true }
 }
 
-export async function signInWithWechat(event: RequestEvent, openId: string) {
+function wechatLink(openId: string, db: PoolConnection, lock = false) {
+  return first<{ accountId: number, appId: string | null }>(
+    'SELECT account_id AS accountId,app_id AS appId FROM attendee_wechat_links WHERE open_id=?' + (lock ? ' FOR UPDATE' : ''), [openId], db)
+}
+
+export async function signInWithWechat(event: RequestEvent, openId: string, appId: string) {
   const writeCookie = await transaction(async (db) => {
+    const link = await wechatLink(openId, db)
+    if (link) {
+      if (!link.appId) await mutate('UPDATE attendee_wechat_links SET app_id=? WHERE open_id=? AND app_id IS NULL', [appId, openId], db)
+      const app = link.appId ?? (await wechatLink(openId, db, true))?.appId
+      if (app !== appId) fail(409, '此微信身份属于其他网站应用')
+      return createAccountSession(event, link.accountId, db)
+    }
     const result = await mutate("INSERT INTO attendee_accounts (kind,identifier,created_at) VALUES ('wechat',?,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)", [openId], db)
+    await mutate('INSERT INTO attendee_wechat_links (open_id,app_id,account_id) VALUES (?,?,?) ON DUPLICATE KEY UPDATE account_id=attendee_wechat_links.account_id', [openId, appId, result.insertId], db)
+    const owner = await wechatLink(openId, db, true)
+    if (owner?.accountId !== result.insertId || owner.appId !== appId) fail(409, '微信账号绑定状态已变化，请重试')
     return createAccountSession(event, result.insertId, db)
   })
   writeCookie()
+}
+
+export async function bindAttendeeWechat(accountId: number, sessionHash: string, openId: string, appId: string) {
+  return transaction(async (db) => {
+    const account = await first("SELECT id FROM attendee_accounts WHERE id=? AND kind IN ('phone','email') AND disabled_at IS NULL FOR UPDATE", [accountId], db)
+    const active = account && await first("SELECT 1 FROM sessions WHERE kind='account' AND account_id=? AND token_hash=? AND expires_at>UTC_TIMESTAMP(3) FOR UPDATE",
+      [accountId, sessionHash], db)
+    if (!active) fail(401, '登录已过期，请重新登录')
+    const owner = await wechatLink(openId, db)
+    if (owner) return owner.accountId === accountId && owner.appId === appId ? 'linked' : 'conflict'
+    if (await first("SELECT id FROM attendee_accounts WHERE kind='wechat' AND identifier=?", [openId], db)) return 'conflict'
+    try {
+      await mutate('INSERT INTO attendee_wechat_links (open_id,app_id,account_id) VALUES (?,?,?)', [openId, appId, accountId], db)
+      return 'linked'
+    } catch (error) {
+      if (isDuplicate(error)) return 'conflict'
+      throw error
+    }
+  })
 }

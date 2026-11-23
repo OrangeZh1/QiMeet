@@ -4,11 +4,14 @@ import { materialImagePreviewUrl } from '#shared/materials'
 
 definePageMeta({ layout: false, pageTransition: false, key: route => route.path })
 const { slug, path, details } = useAttendeeEvent()
+const route = useRoute()
+const recovering = computed(() => route.query.recover === '1')
 const request = useRequestFetch()
 const { data: event, error: eventError } = await details
-if (event.value && !event.value.signedIn) await navigateTo(attendeeLogin(path + '/record'), { redirectCode: 302 })
+if (event.value && !event.value.signedIn) await navigateTo(attendeeLogin(path + '/record' + (recovering.value ? '?recover=1' : '')), { redirectCode: 302 })
 setAttendeeErrorStatus(eventError.value)
-useSeoMeta({ title: () => event.value ? '我的报名 · ' + event.value.conference.title : '我的报名' })
+const pageLabel = computed(() => recovering.value ? '找回报名' : '报名详情')
+useSeoMeta({ title: () => event.value ? pageLabel.value + ' · ' + event.value.conference.title : pageLabel.value })
 
 const { data, error } = await useAsyncData('attendee-record:' + slug, async () => {
   if (!event.value?.signedIn) return { registration: null }
@@ -22,25 +25,15 @@ const { data, error } = await useAsyncData('attendee-record:' + slug, async () =
 const record = computed(() => data.value?.registration)
 const directPoints = computed(() => new Set(event.value?.conference.endedAt ? [] : event.value?.checkpoints
   .filter(point => point.directEnabled && Date.parse(point.endsAt) > Date.now()).map(point => point.id)))
-const opening = ref(false)
-const credentialFirst = ref(false)
 const editing = ref(false)
 const status = ref('')
 const heading = ref<HTMLElement>()
-const recoveryPanel = ref<HTMLElement>()
 
-function openRecovery(withCredential: boolean) {
-  opening.value = true
-  credentialFirst.value = withCredential
-  status.value = ''
-  void nextTick(() => recoveryPanel.value?.focus())
-}
-
-function recovered(registration: Registration) {
+async function recovered(registration: Registration) {
   data.value = { registration }
   if (event.value) event.value = { ...event.value, recognized: true }
-  opening.value = false
   status.value = '已找回报名记录。'
+  await navigateTo(path + '/record', { replace: true })
   void nextTick(() => heading.value?.focus())
 }
 
@@ -60,7 +53,7 @@ const attachmentLink = (id: string) => attendeeApi(slug, 'attachment') + '?id=' 
 </script>
 
 <template>
-  <NuxtLayout name="attendee" toolbar-title="我的报名" navigation>
+  <NuxtLayout name="attendee" :toolbar-title="pageLabel" :back="recovering ? { to: '/mine/recover', label: '活动列表' } : undefined" navigation>
     <div class="record-screen">
       <AttendeeUnavailable
         v-if="!event" class="record-unavailable" title="活动暂不可查看"
@@ -77,24 +70,20 @@ const attachmentLink = (id: string) => attendeeApi(slug, 'attachment') + '?id=' 
           </div>
           <p v-if="status" class="attendee-notice" role="status">{{ status }}</p>
           <p v-if="!record && error" role="alert" class="attendee-error">{{ errorText(error, '暂时无法读取报名记录，可尝试找回。') }}</p>
-          <dl v-if="record && !opening" class="attendee-answers">
+          <dl v-if="record && !recovering" class="attendee-answers">
             <div v-if="record.name && (record.form.legacyContact || !record.fullAccess)" class="attendee-answer-row"><dt>姓名</dt><dd>{{ record.name }}</dd></div>
             <div v-if="record.phone && (record.form.legacyContact || !record.fullAccess)" class="attendee-answer-row"><dt>报名手机号</dt><dd>{{ record.phone }}</dd></div>
             <div class="attendee-answer-row"><dt>提交时间</dt><dd><time :datetime="record.createdAt">{{ displayDate(record.createdAt) }}</time></dd></div>
           </dl>
         </header>
 
-        <div v-if="opening" ref="recoveryPanel" class="record-stack" tabindex="-1">
-          <AttendeeRecovery class="record-block attendee-compact-recovery" :key="String(credentialFirst)" :slug="slug"
-            :identity-recovery="event.identityRecovery" :credential-first="credentialFirst" @recovered="recovered" />
+        <div v-if="recovering" class="record-stack">
+          <AttendeeRecovery class="record-block attendee-compact-recovery" :slug="slug"
+            :identity-recovery="event.identityRecovery" @recovered="recovered" />
         </div>
 
         <section v-else-if="!record" class="record-block record-empty">
-          <h2>暂无报名记录</h2>
-          <button id="record-recovery-entry" type="button" class="record-recovery-entry" aria-label="找回报名" aria-describedby="record-recovery-hint" @click="openRecovery(false)">
-            <UIcon name="i-lucide-search" aria-hidden="true" />
-            <span><strong>找回报名</strong><small id="record-recovery-hint">{{ event.identityRecovery ? '姓名和手机号，或报名凭证' : '使用报名凭证' }}</small></span>
-          </button>
+          <h2>当前活动暂无报名记录</h2>
         </section>
 
         <template v-else>
@@ -137,10 +126,8 @@ const attachmentLink = (id: string) => attendeeApi(slug, 'attachment') + '?id=' 
             </dl>
           </section>
 
-          <div v-if="!editing" class="record-actions attendee-actions">
-            <UButton v-if="record.canEdit" type="button" class="attendee-action" @click="editing = true">修改报名</UButton>
-            <UButton v-if="!record.fullAccess" type="button" class="attendee-action" @click="openRecovery(true)">凭专属凭证查看完整报名</UButton>
-            <UButton type="button" class="attendee-action" color="neutral" variant="outline" @click="openRecovery(false)">找回其他报名</UButton>
+          <div v-if="!editing && record.canEdit" class="record-actions attendee-actions">
+            <UButton type="button" class="attendee-action" @click="editing = true">修改报名</UButton>
           </div>
         </template>
       </template>

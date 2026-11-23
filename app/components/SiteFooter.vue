@@ -14,7 +14,7 @@ const query = computed(() => {
   <footer v-if="copyrightText?.trim() || hasLinks" class="site-footer">
     <p v-if="copyrightText?.trim()" class="site-footer-copyright">{{ copyrightText }}</p>
     <div v-if="hasLinks" class="site-footer-links">
-      <a v-if="site.filingNumber" :href="filingSystemUrl" target="_blank" rel="noopener noreferrer">{{ site.filingNumber }}</a>
+      <a v-if="site.filingNumber" class="site-footer-filing" :href="filingSystemUrl" target="_blank" rel="noopener noreferrer">{{ site.filingNumber }}</a>
       <NuxtLink v-if="!filingOnly && (site.hasPrivacyPolicy || clientLogin)" :to="{ path: '/policies/privacy', query }">隐私政策</NuxtLink>
       <NuxtLink v-if="!filingOnly && (site.hasUserAgreement || clientLogin)" :to="{ path: '/policies/terms', query }">用户协议</NuxtLink>
     </div>
@@ -26,5 +26,6 @@ const query = computed(() => {
 .site-footer-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 3px 14px; padding: 0; }
 .site-footer-copyright + .site-footer-links { margin-top: 4px; }
 .site-footer-links a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.site-footer-links .site-footer-filing { text-decoration: none; }
 .site-footer-links a:hover { color: var(--jade); }
 </style>

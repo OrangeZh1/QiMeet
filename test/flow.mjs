@@ -180,7 +180,8 @@ test('报名、找回、历史表单编辑、附件和签到', async (t) => {
   for (const [path, title] of [
     [entry, '报名流程自动测试 · ' + site.title],
     [entry + '/register', '活动报名 · 报名流程自动测试 · ' + site.title],
-    [entry + '/record', '我的报名 · 报名流程自动测试 · ' + site.title],
+    [entry + '/record', '报名详情 · 报名流程自动测试 · ' + site.title],
+    [entry + '/record?recover=1', '找回报名 · 报名流程自动测试 · ' + site.title],
     [entry + '/check-in', '现场签到 · 报名流程自动测试 · ' + site.title],
   ]) {
     const html = await request(path)
@@ -247,7 +248,7 @@ test('报名、找回、历史表单编辑、附件和签到', async (t) => {
   assert.ok(priorRecord.includes('>原回答</dd>'), 'same-browser SSR displays the existing signup')
   assert.ok(!priorRecord.includes('>报名专属凭证</label>'))
   const publicRecord = await request(entry + '/record')
-  assert.ok(publicRecord.includes('id="record-recovery-entry"'))
+  assert.ok(publicRecord.includes('当前活动暂无报名记录'))
   assert.ok(!publicRecord.includes('id="recovery-name-'))
   assert.ok(!publicRecord.includes('id="recovery-credential-'))
   assert.ok(!publicRecord.includes('>原回答</dd>'))
@@ -258,7 +259,7 @@ test('报名、找回、历史表单编辑、附件和签到', async (t) => {
   assert.equal(recognizedSignup.headers.get('location'), entry + '/record')
   const recognizedDetail = await request(entry, { client: firstDevice })
   assert.ok(recognizedDetail.includes('>已报名</span>'))
-  assert.ok(recognizedDetail.includes('查看我的报名'))
+  assert.ok(recognizedDetail.includes('查看报名详情'))
   assert.ok(!recognizedDetail.includes('立即报名'))
   const publicDetail = await request(entry)
   assert.ok(publicDetail.includes('立即报名'))

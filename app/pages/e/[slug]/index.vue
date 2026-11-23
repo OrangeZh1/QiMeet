@@ -56,7 +56,7 @@ function checkpointTime(point: { startsAt: string, endsAt: string }) {
     ? agendaLabel.format(new Date(point.startsAt)) + ' ' + time
     : time
 }
-const actionText = computed(() => data.value?.recognized ? '查看我的报名' : canRegister.value ? '立即报名' : registrationStatus.value)
+const actionText = computed(() => data.value?.recognized ? '查看报名详情' : canRegister.value ? '立即报名' : registrationStatus.value)
 const hasRegistrationAction = computed(() => data.value?.recognized || canRegister.value)
 const directCheckpoints = computed(() => (data.value?.checkpoints || [])
   .filter(point => point.directEnabled && checkpointState(point) === '签到中'))

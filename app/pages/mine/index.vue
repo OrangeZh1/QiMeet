@@ -12,7 +12,7 @@ const { data: site } = useSiteSettings()
 </script>
 
 <template>
-  <NuxtLayout name="attendee" navigation hide-header dock-copyright>
+  <NuxtLayout name="attendee" navigation hide-header>
     <section class="client-profile">
       <header class="profile-identity">
         <img class="profile-cover" :src="site?.loginImageUrl || fallbackSite.loginImageUrl" alt="" />
@@ -54,6 +54,11 @@ const { data: site } = useSiteSettings()
           <h2 id="profile-recent-title">近期活动</h2>
           <AttendeeActivityList :items="recentActivities" />
         </section>
+        <NuxtLink class="profile-link" to="/mine/recover">
+          <UIcon name="i-lucide-search" aria-hidden="true" />
+          <span>找回报名</span>
+          <UIcon name="i-lucide-chevron-right" aria-hidden="true" />
+        </NuxtLink>
         <NuxtLink class="profile-link" to="/mine/check-in-help">
           <UIcon name="i-lucide-circle-help" aria-hidden="true" />
           <span>帮助中心</span>

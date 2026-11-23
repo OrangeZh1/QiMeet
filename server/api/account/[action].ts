@@ -30,18 +30,18 @@ export default defineEventHandler(async (event) => {
     if (action === 'contact-code' || action === 'contact') return attendeeContactAction(event, action, await jsonBody(event))
     if (action === 'avatar') return uploadAttendeeAvatar(event)
     if (action === 'change-password') return saveAttendeePassword(event, await jsonBody(event))
+    if (action === 'wechat-link') return beginWechatLink(event)
     if (action === 'wechat') {
-      if (!getHeader(event, 'content-type')?.toLowerCase().startsWith('application/x-www-form-urlencoded')) {
-        fail(415, '请求须使用表单')
-      }
       if (Number(getHeader(event, 'content-length') || 0) > 8192 || getHeader(event, 'transfer-encoding')) fail(413, '请求内容过大')
-      const input = object(await readBody(event))
-      if (input.policyAccepted !== '1') fail(400, '请先勾选隐私政策和用户协议')
-      return beginWechat(event, input.next)
+      const legacyForm = getHeader(event, 'content-type')?.split(';', 1)[0]?.trim().toLowerCase() === 'application/x-www-form-urlencoded'
+      const input = legacyForm ? object(await readBody(event)) : await jsonBody(event)
+      if (input.policyAccepted !== (legacyForm ? '1' : true)) fail(400, '请先勾选隐私政策和用户协议')
+      const authorizationUrl = await beginWechat(event, input.next)
+      return legacyForm ? sendRedirect(event, authorizationUrl) : { authorizationUrl }
     }
     if (action === 'code' || action === 'verify' || action === 'password') {
       const input = await jsonBody(event)
-      if (input.policyAccepted !== true) fail(400, '请先勾选隐私政策和用户协议')
+      if (action !== 'code' && input.policyAccepted !== true) fail(400, '请先勾选隐私政策和用户协议')
       const kind = oneOf(input.kind, ['email', 'phone'], '联系方式')
       await requireContactLogin(kind)
       const identifier = contactIdentifier(kind, input.identifier)

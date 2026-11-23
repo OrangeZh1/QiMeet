@@ -2,13 +2,13 @@
 import type { AccountRegistration, AttendeeActivityCard } from '#shared/attendee-account'
 import { displayDate } from '#shared/models'
 import { materialImagePreviewUrl } from '#shared/materials'
-defineProps<{ items: (AttendeeActivityCard | AccountRegistration)[] }>()
+defineProps<{ items: (AttendeeActivityCard | AccountRegistration)[], recover?: boolean }>()
 </script>
 
 <template>
   <ul class="client-activities">
     <li v-for="event in items" :key="event.slug">
-      <NuxtLink :to="attendeePath(event.slug) + ('registrationId' in event ? '/record' : '')" class="client-activity">
+      <NuxtLink :to="attendeePath(event.slug) + (recover ? '/record?recover=1' : 'registrationId' in event ? '/record' : '')" class="client-activity">
         <img v-if="event.coverUrl" class="client-activity-cover" :src="materialImagePreviewUrl(event.coverUrl)" alt="" width="64" height="52" loading="lazy" />
         <div class="client-activity-copy">
           <strong>{{ event.title }}</strong>
@@ -17,7 +17,7 @@ defineProps<{ items: (AttendeeActivityCard | AccountRegistration)[] }>()
             <span v-if="'registrationId' in event" class="attendee-label" :class="{ done: event.checkedIn }">
               {{ event.checkedIn ? '已签到' : '已报名' }}
             </span>
-            <span v-else-if="event.registrationOpen" class="attendee-label done">报名开放</span>
+            <span v-else-if="!recover && event.registrationOpen" class="attendee-label done">报名开放</span>
           </div>
           <small v-if="event.venue">{{ event.venue }}</small>
         </div>

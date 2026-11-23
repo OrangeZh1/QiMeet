@@ -30,6 +30,7 @@ const { data, error } = await useFetch<SiteSettings>('/api/manage/site-settings'
 if (!data.value) throw createError({ statusCode: attendeeErrorStatus(error.value) || 503, message: errorText(error.value, '暂时无法读取站点设置') })
 
 const saved = ref(data.value)
+const wechatCallbackDomain = computed(() => new URL(saved.value.wechatCallbackUrl).hostname)
 function formValues(site: SiteSettings) {
   return {
     title: site.title, loginTagline: site.loginTagline, loginCopyright: site.loginCopyright,
@@ -163,9 +164,9 @@ async function save() {
               maxlength="128" autocomplete="off" :readonly="saving"
               :placeholder="saved.wechatSecretConfigured && input.wechatAppId === saved.wechatAppId ? '已配置，留空保留' : '填写网站应用的 AppSecret'" />
           </ConsoleSettingsField>
-          <ConsoleSettingsField label="授权回调地址" input-id="settings-wechat-callback">
-            <ConsoleInput id="settings-wechat-callback" :model-value="saved.wechatCallbackUrl" variant="none" readonly />
-            <p class="mt-2 text-xs text-muted">在微信开放平台填写该地址的域名，正式使用需要 HTTPS。</p>
+          <ConsoleSettingsField label="授权回调域" input-id="settings-wechat-callback">
+            <ConsoleInput id="settings-wechat-callback" :model-value="wechatCallbackDomain" variant="none" readonly />
+            <p class="mt-2 text-xs text-muted">将此域名填写到微信开放平台的「授权回调域」。</p>
           </ConsoleSettingsField>
         </section>
       </template>

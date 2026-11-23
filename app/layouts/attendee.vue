@@ -1,13 +1,12 @@
 <script setup lang="ts">
 const props = defineProps<{
-  eventPage?: boolean, toolbarTitle?: string, backToEvent?: boolean, navigation?: boolean, hideHeader?: boolean, dockCopyright?: boolean,
+  eventPage?: boolean, toolbarTitle?: string, backToEvent?: boolean, navigation?: boolean, hideHeader?: boolean,
   back?: { to: string, label: string },
 }>()
 const { data: settings } = useSiteSettings()
 const site = computed(() => settings.value || fallbackSite)
 const footerCopyright = computed(() => site.value.loginCopyright)
-const hasFooter = computed(() => Boolean(footerCopyright.value || site.value.filingNumber))
-const hasCopyrightDock = computed(() => props.dockCopyright && Boolean(footerCopyright.value || site.value.filingNumber))
+const hasFooter = computed(() => Boolean(footerCopyright.value.trim() || site.value.filingNumber.trim()))
 useHead({ htmlAttrs: { class: 'qm-attendee-page' } })
 const route = useRoute()
 const slug = computed(() => String(route.params.slug || ''))
@@ -19,6 +18,7 @@ const navigationItems = [
   { to: '/mine', label: '我的', icon: 'i-lucide-user-round' },
 ]
 const activeItem = computed(() => {
+  if (onRecord.value && route.query.recover === '1') return '/mine'
   if (route.path === '/mine/registrations' || onRecord.value) return '/mine/registrations'
   if (route.path === '/mine' || route.path.startsWith('/mine/') || route.path === '/login') return '/mine'
   return '/activities'
@@ -29,7 +29,7 @@ const activeItem = computed(() => {
   <div class="attendee-shell" :class="{
     'attendee-shell--event': eventPage, 'attendee-shell--form': !eventPage && (!!toolbarTitle || navigation),
     'attendee-shell--has-footer': hasFooter, 'attendee-shell--navigation': navigation,
-    'attendee-shell--copyright-docked': hasCopyrightDock,
+    'attendee-shell--home': route.path === '/activities',
   }">
     <header v-if="!hideHeader" class="attendee-top">
       <div class="attendee-top-inner">
@@ -47,21 +47,17 @@ const activeItem = computed(() => {
           <span>{{ site.title }}</span>
         </NuxtLink>
         <span v-if="eventPage || toolbarTitle" class="event-toolbar-title">{{ toolbarTitle || '活动详情' }}</span>
-        <NuxtLink v-if="slug && !onRecord && !eventPage" :to="path + '/record'" class="attendee-top-link">
-          <UIcon name="i-lucide-ticket" aria-hidden="true" />
-          我的报名
-        </NuxtLink>
-        <NuxtLink v-else-if="onRecord" :to="path" class="attendee-top-link">
+        <NuxtLink v-if="onRecord" :to="path" class="attendee-top-link">
           <UIcon name="i-lucide-calendar-days" aria-hidden="true" />
           活动详情
         </NuxtLink>
+        <slot name="header-tools" />
       </div>
     </header>
     <main id="attendee-main" class="attendee-main">
       <slot />
     </main>
-    <SiteFooter v-if="hasCopyrightDock" class="attendee-docked-copyright" :copyright-text="footerCopyright" filing-only />
-    <SiteFooter v-else-if="hasFooter && !dockCopyright" class="attendee-footer" :copyright-text="footerCopyright" filing-only />
+    <SiteFooter v-if="hasFooter" class="attendee-footer" :copyright-text="footerCopyright" filing-only />
     <nav v-if="navigation" class="client-navigation" aria-label="客户端导航">
       <div>
         <NuxtLink v-for="item in navigationItems" :key="item.to" :to="item.to"

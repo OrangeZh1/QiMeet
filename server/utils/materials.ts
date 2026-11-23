@@ -103,16 +103,11 @@ export async function materialContent(event: RequestEvent, id: string, published
   if (preview && material.kind === 'image') {
     const payload = material.hasPreview ? material.payload : await imageMaterialPreview(id, preview, material.payload)
     if (payload) {
-      const etag = '"' + material.digest + '-' + preview + '-webp-v1"'
       setResponseHeaders(event, {
-        'content-type': 'image/webp', 'x-content-type-options': 'nosniff', 'cache-control': 'private, no-cache',
-        'content-security-policy': "default-src 'none'; sandbox", etag,
+        'content-type': 'image/webp', 'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox",
       })
-      const matches = getHeader(event, 'if-none-match')?.split(',').some(tag => tag.trim() === '*' || tag.trim().replace(/^W\//, '') === etag)
-      if (matches) {
-        setResponseStatus(event, 304)
-        return null
-      }
+      if (imageNotModified(event, material.digest + '-' + preview + '-webp-v1', true, !publishedOnly)) return null
       return payload
     }
   }
@@ -122,6 +117,7 @@ export async function materialContent(event: RequestEvent, id: string, published
     'content-security-policy': "default-src 'none'; sandbox",
     'content-disposition': filenameDisposition(attachment ? 'attachment' : 'inline', material.name),
   })
+  if (!attachment && material.kind === 'image' && imageNotModified(event, material.digest, true, !publishedOnly)) return null
   if (!attachment && material.kind === 'video') {
     const length = material.payload.length
     setResponseHeader(event, 'accept-ranges', 'bytes')

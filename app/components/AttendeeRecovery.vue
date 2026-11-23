@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { Registration } from '#shared/models'
 
-const props = withDefaults(defineProps<{ slug: string, identityRecovery?: boolean, credentialFirst?: boolean, title?: string, submitLabel?: string }>(), {
+const props = withDefaults(defineProps<{ slug: string, identityRecovery?: boolean, title?: string, submitLabel?: string }>(), {
   title: '找回报名', submitLabel: '找回报名',
 })
 const emit = defineEmits<{ recovered: [registration: Registration] }>()
-const method = ref<'identity' | 'credential'>(props.credentialFirst || !props.identityRecovery ? 'credential' : 'identity')
+const method = ref<'identity' | 'credential'>(props.identityRecovery ? 'identity' : 'credential')
 const name = ref('')
 const phone = ref('')
 const credential = ref('')

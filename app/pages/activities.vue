@@ -5,10 +5,11 @@ import { materialImagePreviewUrl } from '#shared/materials'
 definePageMeta({ layout: false, pageTransition: false })
 useSeoMeta({ title: '活动' })
 const { data: items, error } = await useFetch<AttendeeActivityCard[]>('/api/activities')
+const { search, query, filtered } = useAttendeeActivitySearch(items)
 const { data: settings } = useSiteSettings()
 const site = computed(() => settings.value || fallbackSite)
-const featured = computed(() => items.value?.[0])
-const more = computed(() => items.value?.slice(1) || [])
+const featured = computed(() => filtered.value[0])
+const more = computed(() => filtered.value.slice(1))
 const brokenFeaturedCover = ref('')
 const featuredCover = computed(() => materialImagePreviewUrl(featured.value?.coverUrl || '', 'card'))
 const featuredImage = ref<HTMLImageElement>()
@@ -18,8 +19,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <NuxtLayout name="attendee" navigation dock-copyright>
-    <section class="platform-banner" aria-label="QiMeet 活动首页">
+  <NuxtLayout name="attendee" navigation>
+    <template #header-tools>
+      <UInput v-model="search" type="search" icon="i-lucide-search" aria-label="搜索活动" placeholder="搜索活动名称或地点"
+        class="home-activity-search" :ui="{ base: 'text-base' }" />
+    </template>
+    <section v-if="!query" class="platform-banner" aria-label="QiMeet 活动首页">
       <AttendeeCoverCarousel :images="site.homeBanners" preview="card" fallback-url="/brand/venue-login.jpg" label="首页 Banner">
         <template #slide="{ image }">
           <div v-if="image.title || image.subtitle" class="platform-brand">
@@ -51,12 +56,13 @@ onMounted(() => {
           <AttendeeActivityList :items="more" />
         </section>
       </template>
-      <p v-else class="attendee-helper">暂无已发布的活动</p>
+      <p v-else class="attendee-helper">{{ query ? '没有匹配的活动' : '暂无已发布的活动' }}</p>
     </section>
   </NuxtLayout>
 </template>
 
 <style scoped>
+.home-activity-search { width: min(100%, 28rem); min-width: 0; justify-self: end; }
 .platform-banner { --banner-inset: clamp(16px, 6vw, 42px); position: relative; isolation: isolate; width: 100%; height: clamp(154px, 44vw, 230px); overflow: hidden; background: #122341; }
 .platform-brand { position: absolute; inset: 0; display: grid; align-content: center; justify-items: start; gap: 7px; padding: 14px var(--banner-inset) 39px; background: linear-gradient(90deg, rgb(9 21 41 / 94%), rgb(9 21 41 / 65%) 41%, transparent 89%); color: #fff; pointer-events: none; }
 .platform-brand strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; max-width: 12em; font-size: clamp(22px, 5.8vw, 36px); line-height: 1.2; font-weight: 740; overflow-wrap: anywhere; text-wrap: balance; }
