@@ -1,0 +1,4 @@
+allowBuilds:
+  '@alicloud/openapi-core': false
+  esbuild: true
+  vue-demi: true

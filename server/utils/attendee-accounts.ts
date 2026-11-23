@@ -1,0 +1,346 @@
+import type { PoolConnection } from 'mysql2/promise'
+import { randomBytes, randomInt } from 'node:crypto'
+import { accountCookie, adminUserDefaultPageSize, adminUserPageSizes, attendeePasswordMin, attendeePasswordMax, type AccountIntent, type AdminUserPage, type AttendeeAccount, type AttendeeProfile, type ContactKind } from '#shared/attendee-account'
+import type { RequestEvent } from './security'
+
+type AccountRow = { id: number, kind: AttendeeAccount['kind'], identifier: string }
+type AccountProfile = { displayName: string, contactPhone: string | null, avatarMaterialId: string | null }
+type AccountAvatar = { id: number, avatarMaterialId: string | null, avatarRevision: number, hasOwnAvatar: number }
+type StoredProfile = AccountRow & AccountAvatar & { displayName: string, hasPassword: number }
+const options = () => ({ path: '/', httpOnly: true, secure: origin().startsWith('https:'), sameSite: 'lax' as const })
+
+export async function getAttendeeAccount(event: RequestEvent) {
+  const token = getCookie(event, accountCookie)
+  if (!token || !/^[a-zA-Z0-9_-]{43}$/.test(token)) return
+  return first<StoredProfile>(
+    'SELECT a.id,a.kind,a.identifier,a.display_name AS displayName,a.avatar_material_id AS avatarMaterialId,' +
+    'a.avatar_revision AS avatarRevision,(a.avatar_mime IS NOT NULL) AS hasOwnAvatar,(a.password_hash IS NOT NULL) AS hasPassword ' +
+    "FROM sessions s JOIN attendee_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.kind='account' AND s.expires_at>UTC_TIMESTAMP(3) AND a.disabled_at IS NULL",
+    [hash(token)],
+  )
+}
+
+export async function requireAttendeeAccount(event: RequestEvent) {
+  const account = await getAttendeeAccount(event)
+  if (!account) fail(401, '请先登录客户端账号')
+  return account
+}
+
+export function accountDisplay(account: AccountRow | undefined): AttendeeAccount | null {
+  if (!account) return null
+  return { id: account.id, kind: account.kind, label: account.kind === 'wechat' ? '微信用户' : account.identifier }
+}
+
+function attendeeAvatarUrl(account: AccountAvatar) {
+  return account.hasOwnAvatar || account.avatarMaterialId
+    ? '/api/account/avatar?id=' + account.id + '&v=' + account.avatarRevision : null
+}
+
+export function attendeeProfileView(account: StoredProfile | undefined): AttendeeProfile | null {
+  if (!account) return null
+  return { ...accountDisplay(account)!, displayName: account.displayName, avatarUrl: attendeeAvatarUrl(account), hasPassword: Boolean(account.hasPassword) }
+}
+
+export async function saveAttendeeDisplayName(event: RequestEvent, input: Record<string, unknown>) {
+  const account = await requireAttendeeAccount(event)
+  const displayName = text(input.displayName, 60, '用户名')
+  await mutate('UPDATE attendee_accounts SET display_name=? WHERE id=?', [displayName, account.id])
+  return { displayName }
+}
+
+export async function uploadAttendeeAvatar(event: RequestEvent) {
+  const account = await requireAttendeeAccount(event)
+  throttle(event, 'attendee-avatar:' + account.id, 12)
+  const filename = cleanFilename(getQuery(event).name)
+  const bytes = await rawUpload(event, uploadLimit('image'))
+  const mime = await verifyUpload(bytes, 'image', filename)
+  const avatarUrl = await transaction(async (db) => {
+    await mutate('UPDATE attendee_accounts SET avatar_mime=?,avatar_payload=?,avatar_revision=avatar_revision+1 WHERE id=?',
+      [mime, bytes, account.id], db)
+    const row = await first<AccountAvatar>(
+      'SELECT id,avatar_material_id AS avatarMaterialId,avatar_revision AS avatarRevision,1 AS hasOwnAvatar FROM attendee_accounts WHERE id=?',
+      [account.id], db,
+    )
+    if (!row) fail(404, '用户不存在')
+    return attendeeAvatarUrl(row)
+  })
+  return { avatarUrl }
+}
+
+export async function readAttendeeAvatar(event: RequestEvent) {
+  const id = positive(getQuery(event).id)
+  const account = await getAttendeeAccount(event)
+  if (account?.id !== id) await assertAdmin(event)
+  const avatar = await first<{ mime: string | null, payload: Buffer | null }>(
+    "SELECT COALESCE(a.avatar_mime,m.mime) AS mime,COALESCE(a.avatar_payload,m.payload) AS payload " +
+    "FROM attendee_accounts a LEFT JOIN materials m ON m.id=a.avatar_material_id AND m.kind='image' WHERE a.id=?",
+    [id],
+  )
+  if (!avatar?.mime || !avatar.payload) fail(404, '头像不存在')
+  setResponseHeaders(event, { 'content-type': avatar.mime, 'content-security-policy': "default-src 'none'; sandbox" })
+  return avatar.payload
+}
+
+export async function listAttendeeAccounts(query: Record<string, unknown>): Promise<AdminUserPage> {
+  const term = text(query.q, 254, '搜索条件', false).toLowerCase()
+  const contact = term.replace(/^\+86\s*(?=\d)/, '')
+  const accountId = /^\d{1,10}$/.test(term) && Number(term) <= 4294967295 ? Number(term) : null
+  const requestedPage = query.page === undefined ? 1 : positive(query.page)
+  const pageSize = query.pageSize === undefined ? adminUserDefaultPageSize : positive(query.pageSize)
+  if (!adminUserPageSizes.some(size => size === pageSize)) fail(400, '每页条数有误')
+  const where = term
+    ? " WHERE (kind IN ('phone','email') AND LOCATE(?,identifier)>0) OR LOCATE(?,contact_phone)>0 OR LOCATE(?,LOWER(display_name))>0 OR id=?"
+    : ''
+  const parameters = term ? [contact, contact, term, accountId] : []
+  const count = await first<{ total: number }>('SELECT COUNT(*) AS total FROM attendee_accounts' + where, parameters)
+  const total = count?.total ?? 0
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)))
+  const accounts = await rows<AccountRow & AccountProfile & AccountAvatar & { createdAt: string, disabled: number }>(
+    'SELECT id,kind,identifier,display_name AS displayName,contact_phone AS contactPhone,avatar_material_id AS avatarMaterialId,' +
+    'avatar_revision AS avatarRevision,(avatar_mime IS NOT NULL) AS hasOwnAvatar,created_at AS createdAt,(disabled_at IS NOT NULL) AS disabled ' +
+    'FROM attendee_accounts' + where + ' ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?',
+    [...parameters, pageSize, (page - 1) * pageSize],
+  )
+  return {
+    rows: accounts.map(account => ({
+      ...accountDisplay(account)!,
+      displayName: account.displayName,
+      phone: account.kind === 'phone' ? account.identifier : account.contactPhone,
+      avatarUrl: attendeeAvatarUrl(account),
+      createdAt: iso(account.createdAt),
+      disabled: Boolean(account.disabled),
+    })),
+    total, page, pageSize,
+  }
+}
+
+export async function createAttendeeAccount(kind: ContactKind, identifier: string, password: unknown, db?: PoolConnection, profile?: AccountProfile) {
+  const passwordHash = await createPasswordHash(registrationPassword(password))
+  if (profile?.avatarMaterialId) await assertMaterial(profile.avatarMaterialId, db)
+  try {
+    const { insertId } = await mutate(
+      'INSERT INTO attendee_accounts (kind,identifier,password_hash,display_name,contact_phone,avatar_material_id,created_at) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(3))',
+      [kind, identifier, passwordHash, profile?.displayName ?? '', profile?.contactPhone ?? null, profile?.avatarMaterialId ?? null], db,
+    )
+    return { id: insertId, kind, label: identifier }
+  } catch (error) {
+    if (isDuplicate(error)) fail(409, '此联系方式已注册')
+    if (error instanceof Error && 'code' in error && error.code === 'ER_NO_REFERENCED_ROW_2') fail(409, '头像素材已不可用，请重新选择')
+    throw error
+  }
+}
+
+async function attendeeForUpdate(id: number, db: PoolConnection) {
+  const account = await first<{ kind: AttendeeAccount['kind'] }>('SELECT kind FROM attendee_accounts WHERE id=? FOR UPDATE', [id], db)
+  if (!account) fail(404, '用户不存在')
+  return account
+}
+
+export async function editAttendeeAccount(input: Record<string, unknown>) {
+  const id = positive(input.id)
+  const displayName = text(input.displayName, 60, '名称')
+  const passwordHash = input.password === undefined ? undefined : await createPasswordHash(registrationPassword(input.password))
+  await transaction(async (db) => {
+    const account = await attendeeForUpdate(id, db)
+    const fields = ['display_name=?']
+    const values: unknown[] = [displayName]
+    if (passwordHash) {
+      if (account.kind === 'wechat') fail(403, '此账号使用微信登录')
+      fields.push('password_hash=?')
+      values.push(passwordHash)
+    }
+    if (account.kind !== 'phone' && input.phone !== undefined) {
+      const candidate = text(input.phone, 16, '手机号', false)
+      fields.push('contact_phone=?')
+      values.push(candidate ? contactIdentifier('phone', candidate) : null)
+    }
+    if (input.avatarMaterialId !== undefined) {
+      const avatar = text(input.avatarMaterialId, 36, '头像素材', false).toLowerCase() || null
+      if (avatar) await assertMaterial(avatar, db)
+      fields.push('avatar_material_id=?', 'avatar_payload=NULL', 'avatar_mime=NULL', 'avatar_revision=avatar_revision+1')
+      values.push(avatar)
+    }
+    try {
+      await mutate('UPDATE attendee_accounts SET ' + fields.join(',') + ' WHERE id=?', [...values, id], db)
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ER_NO_REFERENCED_ROW_2') fail(409, '头像素材已不可用，请重新选择')
+      throw error
+    }
+    if (passwordHash) await mutate('DELETE FROM sessions WHERE account_id=?', [id], db)
+  })
+  return { ok: true }
+}
+
+export async function setAttendeeStatus(input: Record<string, unknown>) {
+  const id = positive(input.id)
+  const disabled = input.disabled
+  if (typeof disabled !== 'boolean') fail(400, '请选择用户状态')
+  await transaction(async (db) => {
+    await attendeeForUpdate(id, db)
+    await mutate('UPDATE attendee_accounts SET disabled_at=IF(?,COALESCE(disabled_at,UTC_TIMESTAMP(3)),NULL) WHERE id=?', [disabled, id], db)
+    if (disabled) await mutate('DELETE FROM sessions WHERE account_id=?', [id], db)
+  })
+  return { ok: true }
+}
+
+export async function deleteAttendeeAccount(id: number) {
+  await transaction(async (db) => {
+    await attendeeForUpdate(id, db)
+    await mutate('DELETE FROM sessions WHERE account_id=?', [id], db)
+    await mutate('UPDATE registrations SET account_id=NULL WHERE account_id=?', [id], db)
+    await mutate('DELETE FROM attendee_accounts WHERE id=?', [id], db)
+  })
+  return { ok: true }
+}
+
+async function createAccountSession(event: RequestEvent, id: number, db: PoolConnection) {
+  if (!await first('SELECT id FROM attendee_accounts WHERE id=? AND disabled_at IS NULL FOR UPDATE', [id], db)) {
+    fail(403, '账号已停用或不存在')
+  }
+  const token = randomBytes(32).toString('base64url')
+  const days = 30
+  await mutate("INSERT INTO sessions (token_hash,kind,registration_id,expires_at,account_id) VALUES (?,'account',NULL,UTC_TIMESTAMP(3)+INTERVAL 30 DAY,?)",
+    [hash(token), id], db)
+  const previous = getCookie(event, accountCookie)
+  if (previous) await mutate("DELETE FROM sessions WHERE token_hash=? AND kind='account'", [hash(previous)], db)
+  return () => setCookie(event, accountCookie, token, { ...options(), maxAge: days * 86400 })
+}
+
+export async function logoutAttendee(event: RequestEvent) {
+  const previous = getCookie(event, accountCookie)
+  if (previous) await mutate("DELETE FROM sessions WHERE token_hash=? AND kind='account'", [hash(previous)])
+  deleteCookie(event, accountCookie, options())
+  return { ok: true }
+}
+
+export function contactIdentifier(kind: ContactKind, input: unknown) {
+  const value = text(input, 254, kind === 'email' ? '邮箱' : '手机号').toLowerCase()
+  if (kind === 'email') {
+    if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i.test(value)) fail(400, '请输入有效的邮箱地址')
+    return value
+  }
+  const number = value.replace(/^\+86\s*/, '')
+  if (!/^1[3-9]\d{9}$/.test(number)) fail(400, '请输入有效的中国大陆手机号')
+  return number
+}
+
+const codeDigest = (kind: ContactKind, identifier: string, intent: AccountIntent, code: string) =>
+  sign(['attendee-code', kind, identifier, intent, code].join(':'))
+
+export async function deliverAttendeeCode(event: RequestEvent, kind: ContactKind, identifier: string, intent: AccountIntent) {
+  throttle(event, 'attendee-code:' + kind, 8, 600000)
+  const deliver = await attendeeCodeDelivery(kind)
+  const code = String(randomInt(100000, 1000000))
+  const digest = codeDigest(kind, identifier, intent, code)
+  await transaction(async (db) => {
+    const created = await mutate(
+      'INSERT IGNORE INTO attendee_codes VALUES (?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3)+INTERVAL 5 MINUTE,5)',
+      [kind, identifier, digest], db,
+    )
+    if (created.affectedRows) return
+    const updated = await mutate(
+      'UPDATE attendee_codes SET digest=?,sent_at=UTC_TIMESTAMP(3),expires_at=UTC_TIMESTAMP(3)+INTERVAL 5 MINUTE,remaining=5 ' +
+      'WHERE kind=? AND identifier=? AND sent_at<=UTC_TIMESTAMP(3)-INTERVAL 60 SECOND',
+      [digest, kind, identifier], db,
+    )
+    if (!updated.affectedRows) fail(429, '请在 60 秒后重新获取验证码')
+  })
+  try {
+    await deliver(identifier, code)
+  } catch {
+    fail(502, '验证码暂时无法送达，请稍后重试')
+  }
+  if (randomBytes(1)[0] === 0) {
+    await mutate('DELETE FROM attendee_codes WHERE expires_at<=UTC_TIMESTAMP(3) LIMIT 1000', [])
+  }
+  return { retryAfter: 60 }
+}
+
+export async function verifyAttendeeCode(
+  event: RequestEvent, kind: ContactKind, identifier: string, intent: AccountIntent, code: string, password?: unknown,
+) {
+  throttle(event, 'attendee-code-verify', 35, 300000)
+  if (!/^\d{6}$/.test(code)) fail(400, '请输入 6 位验证码')
+  const newPassword = intent === 'register' ? registrationPassword(password) : undefined
+  const result = await transaction(async (db) => {
+    const params = [kind, identifier]
+    const challenge = await first<{ digest: string, remaining: number }>(
+      'SELECT digest,remaining FROM attendee_codes WHERE kind=? AND identifier=? AND expires_at>UTC_TIMESTAMP(3) FOR UPDATE',
+      params, db,
+    )
+    if (!challenge?.remaining) return { error: '验证码已失效，请重新获取' }
+    if (!safeEqual(challenge.digest, codeDigest(kind, identifier, intent, code))) {
+      await mutate('UPDATE attendee_codes SET remaining=remaining-1 WHERE kind=? AND identifier=?', params, db)
+      return { error: '验证码错误' }
+    }
+    await mutate('DELETE FROM attendee_codes WHERE kind=? AND identifier=?', params, db)
+    const existing = await first<AccountRow>('SELECT id,kind,identifier FROM attendee_accounts WHERE kind=? AND identifier=?', params, db)
+    if (intent === 'login' && !existing) return { error: '此联系方式尚未注册，请先注册' }
+    if (intent === 'register' && existing) return { error: '此联系方式已注册，请直接登录' }
+    const id = existing?.id ?? (await createAttendeeAccount(kind, identifier, newPassword, db)).id
+    return { account: accountDisplay({ id, kind, identifier }), writeCookie: await createAccountSession(event, id, db) }
+  })
+  if (!result.writeCookie) fail(400, result.error || '验证失败')
+  result.writeCookie()
+  return result.account
+}
+
+function registrationPassword(value: unknown) {
+  if (typeof value !== 'string' || value.length < attendeePasswordMin || value.length > attendeePasswordMax || !value.trim()) {
+    fail(400, '密码须为 ' + attendeePasswordMin + ' 至 ' + attendeePasswordMax + ' 个字符')
+  }
+  return value
+}
+
+export async function signInWithPassword(event: RequestEvent, kind: ContactKind, identifier: string, password: unknown) {
+  throttle(event, 'attendee-password-login', 15, 300000)
+  if (typeof password !== 'string' || !password || password.length > attendeePasswordMax) fail(400, '请输入密码')
+  const account = await first<AccountRow & { passwordHash: string | null }>(
+    'SELECT id,kind,identifier,password_hash AS passwordHash FROM attendee_accounts WHERE kind=? AND identifier=?',
+    [kind, identifier],
+  )
+  const verified = await verifyPassword(password, account?.passwordHash || '0'.repeat(32) + ':' + '0'.repeat(128))
+  if (!verified || !account?.passwordHash) fail(401, '账号或密码有误，也可使用验证码登录')
+  const writeCookie = await transaction(async (db) => {
+    const current = await first<{ passwordHash: string | null }>(
+      'SELECT password_hash AS passwordHash FROM attendee_accounts WHERE id=? FOR UPDATE', [account.id], db,
+    )
+    if (current?.passwordHash !== account.passwordHash) fail(401, '账号或密码有误，也可使用验证码登录')
+    return createAccountSession(event, account.id, db)
+  })
+  writeCookie()
+  return accountDisplay(account)
+}
+
+export async function saveAttendeePassword(event: RequestEvent, input: Record<string, unknown>) {
+  const account = await requireAttendeeAccount(event)
+  if (account.kind === 'wechat') fail(403, '此账号使用微信登录')
+  const next = registrationPassword(input.newPassword)
+  throttle(event, 'attendee-change-password:' + account.id, 10)
+  const token = hash(getCookie(event, accountCookie)!)
+  const nextHash = await createPasswordHash(next)
+  await transaction(async (db) => {
+    const current = await first<{ passwordHash: string | null }>(
+      'SELECT password_hash AS passwordHash FROM attendee_accounts WHERE id=? FOR UPDATE', [account.id], db,
+    )
+    if (!current) fail(401, '登录已过期，请重新登录')
+    const active = await first("SELECT 1 FROM sessions WHERE kind='account' AND account_id=? AND token_hash=? AND expires_at>UTC_TIMESTAMP(3) FOR UPDATE",
+      [account.id, token], db)
+    if (!active) fail(401, '登录已过期，请重新登录')
+    if (current.passwordHash) {
+      if (!await verifyPassword(input.currentPassword, current.passwordHash)) fail(403, '当前密码有误')
+      if (input.currentPassword === next) fail(400, '新密码须与当前密码不同')
+    }
+    await mutate('UPDATE attendee_accounts SET password_hash=? WHERE id=?', [nextHash, account.id], db)
+    await mutate("DELETE FROM sessions WHERE kind='account' AND account_id=? AND token_hash<>?", [account.id, token], db)
+  })
+  return { ok: true }
+}
+
+export async function signInWithWechat(event: RequestEvent, openId: string) {
+  const writeCookie = await transaction(async (db) => {
+    const result = await mutate("INSERT INTO attendee_accounts (kind,identifier,created_at) VALUES ('wechat',?,UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)", [openId], db)
+    return createAccountSession(event, result.insertId, db)
+  })
+  writeCookie()
+}

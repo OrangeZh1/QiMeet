@@ -1,0 +1,73 @@
+.qisvc-console-shell {
+  --qisvc-console-nav-active-bg: #e9f0ff;
+  --qisvc-console-nav-active-hover-bg: #dfe9ff;
+  --qisvc-console-nav-idle: var(--ink);
+  --qisvc-console-nav-idle-hover: #1844a2;
+  position: relative !important;
+  inset: auto !important;
+  min-height: 100svh;
+  min-width: 0;
+  overflow: visible !important;
+}
+.qisvc-console-panel { min-width: 0; min-height: 100svh; }
+.qisvc-console-panel-body { min-width: 0; overflow: visible !important; }
+.qisvc-console-topbar { position: sticky; top: 0; z-index: 30; min-height: 4rem; flex: none; background: #fcfdff; }
+.qimeet-toolbar { height: 4rem; padding-inline: clamp(16px, 3.2vw, 42px); border-bottom: 1px solid var(--ui-border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.qisvc-console-sidebar > [data-slot="header"], .qisvc-console-sidebar-header { box-sizing: border-box; height: 4rem; min-height: 4rem; }
+.qisvc-console-sidebar-header { width: 100%; min-width: 0; }
+.qisvc-console-sidebar-content { height: 100dvh; max-height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.qisvc-console-sidebar-overlay { background: #0c193980; backdrop-filter: blur(2px); }
+.qisvc-console-sidebar-scroll { width: 100%; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: .75rem 1rem; }
+.qisvc-console-sidebar-nav { display: flex; min-width: 0; flex-direction: column; gap: .25rem; }
+.qisvc-console-brand { display: flex; align-items: center; min-width: 0; flex: 1 1 auto; gap: .625rem; color: var(--ink); }
+.qisvc-console-brand-logo { width: 2.25rem; height: 2.25rem; flex: none; object-fit: contain; border-radius: .55rem; }
+.qisvc-console-brand-copy { display: grid; min-width: 0; }
+.qisvc-console-brand-name { font-size: 1rem; line-height: 1.25; font-weight: 730; }
+.qisvc-console-brand-caption { color: var(--muted); font-size: .72rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qisvc-console-sidebar-actions { display: flex; flex: none; align-items: center; }
+.qisvc-console-sidebar-action { width: 2rem; height: 2rem; }
+.qisvc-console-sidebar-link { color: var(--qisvc-console-nav-idle); transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+.qisvc-console-sidebar-link:hover { color: var(--qisvc-console-nav-idle-hover); }
+.qisvc-console-sidebar-link[data-active="true"] { color: #204ca9; font-weight: 650; background: var(--qisvc-console-nav-active-bg); }
+.qisvc-console-sidebar-link[data-active="true"]:hover { background: var(--qisvc-console-nav-active-hover-bg); }
+.account-toggle { gap: 8px; padding: 5px 8px 5px 5px; border-radius: 9px; font-weight: 640; }
+.account-toggle .avatar { width: 32px; height: 32px; overflow: hidden; }
+.account-toggle img { width: 100%; height: 100%; object-fit: cover; }
+.account-name { max-width: 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-chevron { font-size: 15px; color: var(--muted); }
+@media (min-width: 1024px) {
+  .qisvc-console-sidebar { position: sticky !important; top: 0; width: 14.5rem !important; height: 100svh; align-self: flex-start; transition: width var(--motion-enter) var(--motion-ease); }
+  .qisvc-console-sidebar[data-collapsed="true"] { width: 4rem !important; }
+}
+.qisvc-console-sidebar[data-collapsed="true"] > [data-slot="header"],
+.qisvc-console-sidebar[data-collapsed="true"] .qisvc-console-sidebar-scroll { padding-inline: .75rem !important; }
+.qisvc-console-sidebar[data-collapsed="true"] > [data-slot="header"],
+.qisvc-console-sidebar[data-collapsed="true"] .qisvc-console-sidebar-nav { justify-content: center; align-items: center; }
+.qisvc-console-sidebar[data-collapsed="true"] .qisvc-console-sidebar-action,
+.qisvc-console-sidebar[data-collapsed="true"] .qisvc-console-sidebar-link {
+  width: 2.5rem; min-width: 2.5rem; height: 2.5rem; margin-inline: 0;
+}
+@media (max-width: 1023.98px) {
+  .qisvc-console-sidebar-content .qisvc-console-desktop-collapse { display: none !important; }
+  .qisvc-console-shell { width: 100%; max-width: 100vw; overflow-x: clip !important; }
+}
+@media (max-width: 640px) {
+  .account-name { max-width: 7rem; }
+  .top-path { gap: 6px; }
+  .qimeet-toolbar { padding-inline: 12px; }
+}
+@media (max-width: 360px) { .top-parent, .top-divider, .account-name { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .qisvc-console-sidebar, .qisvc-console-sidebar-link { transition: none !important; }
+}
+
+.qisvc-console-sidebar[data-collapsed="true"] > [data-slot="header"] {
+  justify-content: center !important;
+  padding-inline: 0 !important;
+}
+.qisvc-console-sidebar[data-collapsed="true"] > [data-slot="header"] .qisvc-console-sidebar-action {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}

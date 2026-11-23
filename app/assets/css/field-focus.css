@@ -1,0 +1,44 @@
+:is(.form-stack, .filter-control) :is(input:not([type=checkbox]):not([type=radio]), textarea, select):focus,
+.filter-control:focus {
+  outline: none;
+  border-color: #4b74c6;
+  box-shadow: 0 0 0 2px #3f75d51c;
+}
+
+@media (forced-colors: active) {
+  :is(.form-stack, .filter-control) :is(input:not([type=checkbox]):not([type=radio]), textarea, select):focus,
+  .filter-control:focus { outline: 2px solid Highlight; outline-offset: 0; }
+}
+
+html.qm-admin-page {
+  --qm-admin-control-height: 2rem;
+  --qm-admin-control-border: #ced8e8;
+}
+
+html.qm-admin-page :is(
+  input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']),
+  select, button[role='combobox'][data-slot='base']
+) {
+  height: var(--qm-admin-control-height);
+  min-height: var(--qm-admin-control-height);
+  padding-block: 0;
+  border: 1px solid var(--qm-admin-control-border);
+  border-radius: 6px;
+  background-color: #fff;
+  box-shadow: none;
+  font-size: 14px;
+}
+
+html.qm-admin-page :is(
+  input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']),
+  select, button[role='combobox'][data-slot='base']
+):focus {
+  border-color: #5982cf;
+  box-shadow: 0 0 0 2px #3f75d51c;
+}
+
+html.qm-admin-page textarea:not(.markdown-source) { background-color: #fff; }
+
+@media (forced-colors: active) {
+  html.qm-admin-page :is(input, select, button[role='combobox']):focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
+}

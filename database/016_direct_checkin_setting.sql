@@ -1,0 +1,1 @@
+ALTER TABLE checkpoints ADD COLUMN direct_enabled BOOLEAN NOT NULL DEFAULT FALSE;

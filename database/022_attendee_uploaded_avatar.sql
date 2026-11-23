@@ -1,0 +1,4 @@
+ALTER TABLE attendee_accounts
+  ADD COLUMN avatar_mime VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  ADD COLUMN avatar_payload MEDIUMBLOB NULL,
+  ADD COLUMN avatar_revision INT UNSIGNED NOT NULL DEFAULT 0;

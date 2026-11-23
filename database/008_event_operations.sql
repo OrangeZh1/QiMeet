@@ -1,0 +1,4 @@
+ALTER TABLE events
+  ADD COLUMN registration_closed_at DATETIME(3) NULL,
+  ADD COLUMN ended_at DATETIME(3) NULL,
+  ADD COLUMN agenda JSON NOT NULL DEFAULT (JSON_ARRAY());

@@ -1,0 +1,1 @@
+ALTER TABLE events ADD COLUMN copyright_text VARCHAR(240) NOT NULL DEFAULT '';

@@ -1,0 +1,44 @@
+{
+  "name": "qimeet",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24.11 <25"
+  },
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "start": "node --env-file-if-exists=.env .output/server/index.mjs",
+    "db:migrate": "node --env-file-if-exists=.env scripts/setup.mjs migrate",
+    "admin:set": "node --env-file-if-exists=.env scripts/setup.mjs admin",
+    "demo:seed": "node --env-file-if-exists=.env scripts/setup.mjs demo",
+    "test:flow": "node --env-file-if-exists=.env --test test/flow.mjs"
+  },
+  "dependencies": {
+    "@alicloud/dysmsapi20170525": "4.6.0",
+    "@alicloud/openapi-client": "0.4.15",
+    "@iconify-json/lucide": "^1.2.0",
+    "@nuxt/ui": "4.10.0",
+    "busboy": "^1.6.0",
+    "file-type": "^21.3.0",
+    "marked": "17.0.6",
+    "mysql2": "^3.16.0",
+    "nodemailer": "10.6.1",
+    "nuxt": "4.5.2",
+    "qrcode": "^1.5.4",
+    "tailwindcss": "^4.1.0",
+    "tencentcloud-sdk-nodejs-sms": "4.1.306",
+    "vue": "3.5.40"
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/node": "^24.0.0",
+    "@types/nodemailer": "8.0.2",
+    "@types/qrcode": "^1.5.6",
+    "typescript": "~5.9.3",
+    "vue-tsc": "^3.1.0"
+  }
+}
