@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { displayDate, toLocalInput, type AgendaItem } from '#shared/models'
+import { attendeeCheckinSourceLabel, displayDate, toLocalInput, type AgendaItem, type CheckinSource } from '#shared/models'
 import RichMarkdown from '~/components/RichMarkdown.vue'
 
 definePageMeta({ layout: false, pageTransition: false, key: route => route.path })
@@ -58,9 +58,12 @@ function checkpointTime(point: { startsAt: string, endsAt: string }) {
 }
 const actionText = computed(() => data.value?.recognized ? '查看报名详情' : canRegister.value ? '立即报名' : registrationStatus.value)
 const hasRegistrationAction = computed(() => data.value?.recognized || canRegister.value)
-const directCheckpoints = computed(() => (data.value?.checkpoints || [])
-  .filter(point => point.directEnabled && checkpointState(point) === '签到中'))
+const checkedIn = computed<Partial<Record<number, CheckinSource>>>(() => data.value?.checkedInSources || {})
+const openCheckpoints = computed(() => (data.value?.checkpoints || []).filter(point => !checkedIn.value[point.id] && checkpointState(point) === '签到中'))
+const directCheckpoints = computed(() => openCheckpoints.value.filter(point => point.directEnabled))
+const actionCount = computed(() => Number(hasRegistrationAction.value) + Number(directCheckpoints.value.length > 0) + Number(openCheckpoints.value.length > 0))
 const checkinPickerOpen = ref(false)
+const scannerOpen = ref(false)
 const registrationLink = computed(() => {
   const page = path + (data.value?.recognized ? '/record' : '/register')
   return data.value?.signedIn ? page : attendeeLogin(page)
@@ -140,28 +143,37 @@ const checkinLink = (point: number) => {
 
       <section v-if="data.checkpoints.length" class="event-section">
         <h2>现场签到</h2>
-        <p class="event-check-in-note">{{ conference.endedAt ? '可在「我的报名」查看签到记录。' : directCheckpoints.length ? '可扫描现场二维码，也可从底部进入手机签到。' : '到场后可扫描现场二维码签到。' }}</p>
+        <p v-if="openCheckpoints.length" class="event-check-in-note">从底部选择可用的签到方式。</p>
         <ul class="event-checkpoints">
           <li v-for="checkpoint in data.checkpoints" :key="checkpoint.id">
             <div class="event-checkpoint-copy">
               <strong>{{ checkpoint.title }}</strong>
-              <span class="event-checkpoint-state" :data-live="checkpointState(checkpoint) === '签到中'">{{ checkpointState(checkpoint) }}</span>
+              <span class="event-checkpoint-state" :data-live="!!checkedIn[checkpoint.id] || checkpointState(checkpoint) === '签到中'">
+                {{ checkedIn[checkpoint.id] ? '已签到 · ' + attendeeCheckinSourceLabel(checkedIn[checkpoint.id]!) : checkpointState(checkpoint) }}
+              </span>
             </div>
             <span class="event-checkpoint-time">{{ checkpointTime(checkpoint) }}</span>
           </li>
         </ul>
       </section>
 
-      <div class="event-action-bar" :class="{ 'event-action-bar-paired': hasRegistrationAction && directCheckpoints.length }">
+      <div class="event-action-bar" :class="{ 'event-action-bar-paired': actionCount === 2, 'event-action-bar-three': actionCount === 3 }">
         <NuxtLink v-if="hasRegistrationAction" class="event-enroll-action"
-          :class="{ 'event-enroll-secondary': directCheckpoints.length }"
+          :class="{ 'event-enroll-secondary': openCheckpoints.length }"
           :to="registrationLink">{{ actionText }}</NuxtLink>
-        <button v-else-if="!directCheckpoints.length" type="button" class="event-enroll-action" disabled>{{ actionText }}</button>
+        <button v-else-if="!actionCount" type="button" class="event-enroll-action" disabled>{{ actionText }}</button>
         <NuxtLink v-if="directCheckpoints.length === 1 && directCheckpoints[0]" class="event-enroll-action"
+          :class="{ 'event-enroll-secondary': openCheckpoints.length }"
           :to="checkinLink(directCheckpoints[0].id)">手机签到</NuxtLink>
         <button v-else-if="directCheckpoints.length > 1" type="button" class="event-enroll-action" aria-haspopup="dialog"
+          :class="{ 'event-enroll-secondary': openCheckpoints.length }"
           @click="checkinPickerOpen = true">手机签到</button>
+        <button v-if="openCheckpoints.length" type="button" class="event-enroll-action" aria-haspopup="dialog" @click="scannerOpen = true">扫码签到</button>
       </div>
+      <UModal v-if="openCheckpoints.length || scannerOpen" v-model:open="scannerOpen" title="扫码签到" description="识别后进入签到确认页。"
+        :ui="{ overlay: 'z-[60]', content: 'z-[60]' }">
+        <template #body><CheckInQrScanner v-if="scannerOpen" /></template>
+      </UModal>
       <UModal v-if="directCheckpoints.length > 1 || checkinPickerOpen" v-model:open="checkinPickerOpen"
         title="选择签到环节" description="仅显示当前开放的手机签到环节。"
         :ui="{ overlay: 'z-[60]', content: 'z-[60]' }">

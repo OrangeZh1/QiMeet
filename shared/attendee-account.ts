@@ -1,3 +1,5 @@
+import type { CheckinSource } from './models'
+
 export type ContactKind = 'email' | 'phone'
 
 export function detectAttendeeContact(input: string): { kind: ContactKind, identifier: string } | undefined {
@@ -38,6 +40,7 @@ export type AccountPendingCheckin = {
   eventSlug: string, eventTitle: string, checkpointId: number, checkpointTitle: string,
   startsAt: string, endsAt: string, directEnabled: boolean,
 }
+export type AccountCheckinRecord = { eventTitle: string, checkpointId: number, checkpointTitle: string, checkedAt: string, source: CheckinSource }
 
 export function attendeeReturn(value: unknown) {
   if (typeof value !== 'string' || value.length > 1200 ||

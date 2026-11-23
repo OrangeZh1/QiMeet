@@ -1,67 +1,47 @@
 <script setup lang="ts">
-import type { AccountPendingCheckin } from '#shared/attendee-account'
+import type { AccountCheckinRecord } from '#shared/attendee-account'
+import { attendeeCheckinSourceLabel, displayDate } from '#shared/models'
 
 definePageMeta({ layout: false, pageTransition: false })
-useSeoMeta({ title: '待签到' })
-const { data, error } = await useFetch<AccountPendingCheckin[]>('/api/account/pending-check-ins', {
-  key: 'attendee-pending-checkins', cache: 'no-store',
+useSeoMeta({ title: '签到记录' })
+const { data: history, error } = await useFetch<AccountCheckinRecord[]>('/api/account/check-in-history', {
+  key: 'attendee-checkin-history', cache: 'no-store',
 })
 if (attendeeErrorStatus(error.value) === 401) await navigateTo(attendeeLogin('/mine/check-ins'), { redirectCode: 302 })
-
-const now = useState('attendee-pending-checkins-clock', () => Date.now())
-const method = ref<'phone' | 'scan'>('phone')
-const pending = computed(() => (data.value || []).filter(item => Date.parse(item.endsAt) > now.value))
-const visible = computed(() => method.value === 'phone' ? pending.value.filter(item => item.directEnabled) : pending.value)
-let timer: ReturnType<typeof setInterval> | undefined
-onMounted(() => {
-  now.value = Date.now()
-  timer = setInterval(() => { now.value = Date.now() }, 15000)
-})
-onBeforeUnmount(() => clearInterval(timer))
-const isOpen = (item: AccountPendingCheckin) => Date.parse(item.startsAt) <= now.value
 </script>
 
 <template>
-  <NuxtLayout name="attendee" toolbar-title="待签到" :back="{ to: '/mine', label: '我的' }">
-    <section class="client-section pending-checkins">
-      <h1 class="sr-only">待签到</h1>
-      <div class="attendee-tablist" role="group" aria-label="签到方式">
-        <button type="button" :aria-pressed="method === 'phone'" @click="method = 'phone'">手机签到</button>
-        <button type="button" :aria-pressed="method === 'scan'" @click="method = 'scan'">扫码签到</button>
-      </div>
-      <template v-if="method === 'scan'">
-        <p class="attendee-helper">扫描主办方提供的现场签到码，也可以用微信扫一扫。</p>
-        <CheckInQrScanner />
-      </template>
-      <p v-if="error" class="attendee-error" role="alert">{{ errorText(error, '暂时无法读取待签到环节') }}</p>
-      <ul v-else-if="visible.length" class="pending-list">
-        <li v-for="item in visible" :key="item.checkpointId" class="pending-card">
-          <NuxtLink :to="attendeePath(item.eventSlug)" class="attendee-inline-link">{{ item.eventTitle }}</NuxtLink>
-          <div class="pending-heading">
-            <h2>{{ item.checkpointTitle }}</h2>
-            <span class="attendee-label" :class="{ done: isOpen(item) }">{{ isOpen(item) ? '签到中' : '待开始' }}</span>
-          </div>
-          <p class="attendee-helper">{{ attendeeDateRange(item.startsAt, item.endsAt) }}</p>
-          <NuxtLink v-if="isOpen(item) && method === 'phone'" class="pending-action"
-            :to="{ path: attendeePath(item.eventSlug) + '/check-in', query: { point: item.checkpointId } }">手机签到</NuxtLink>
+  <NuxtLayout name="attendee" toolbar-title="签到记录" :back="{ to: '/mine', label: '我的' }">
+    <section class="client-section checkin-history">
+      <h1 class="sr-only">签到记录</h1>
+      <p v-if="error" class="attendee-error" role="alert">暂时无法读取签到记录，请稍后重试。</p>
+      <ul v-else-if="history?.length" class="checkin-history-list">
+        <li v-for="item in history" :key="item.checkpointId">
+          <NuxtLink :to="'/mine/check-in-record/' + item.checkpointId" class="checkin-history-card checkin-history-link">
+            <span class="attendee-inline-link">{{ item.eventTitle }}</span>
+            <div class="checkin-history-heading">
+              <h2>{{ item.checkpointTitle }}</h2>
+              <span class="attendee-label done">已签到</span>
+            </div>
+            <p class="attendee-helper"><time :datetime="item.checkedAt">{{ displayDate(item.checkedAt) }}</time> · {{ attendeeCheckinSourceLabel(item.source) }}</p>
+          </NuxtLink>
         </li>
       </ul>
-      <div v-else class="pending-card pending-empty">
-        <UIcon name="i-lucide-scan-line" aria-hidden="true" />
-        <h2>{{ method === 'phone' && pending.length ? '暂无可手机签到的环节' : '暂无待签到环节' }}</h2>
-        <NuxtLink to="/mine/registrations" class="attendee-inline-link">查看我的报名</NuxtLink>
+      <div v-else class="checkin-history-card checkin-history-empty">
+        <UIcon name="i-lucide-list-checks" aria-hidden="true" />
+        <h2>暂无签到记录</h2>
       </div>
     </section>
   </NuxtLayout>
 </template>
 
 <style scoped>
-.pending-checkins { max-width: 38rem; margin-inline: auto; }
-.pending-list { display: grid; gap: 10px; list-style: none; padding: 0; }
-.pending-card { display: grid; gap: 7px; padding: 14px; border: 1px solid #e1e8f2; border-radius: 10px; }
-.pending-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
-.pending-card h2 { font-size: 16px; font-weight: 690; overflow-wrap: anywhere; }
-.pending-action { display: flex; align-items: center; justify-content: center; justify-self: start; min-height: 42px; padding-inline: 14px; border-radius: 7px; background: #2356bf; color: #fff; font-size: 14px; font-weight: 620; }
-.pending-empty { justify-items: center; padding-block: 24px; }
-.pending-empty > span { color: #2356bf; font-size: 26px; }
+.checkin-history { max-width: 38rem; margin-inline: auto; }
+.checkin-history-list { display: grid; gap: 10px; list-style: none; padding: 0; }
+.checkin-history-card { display: grid; gap: 6px; padding: 14px; border: 1px solid #e1e8f2; border-radius: 10px; }
+.checkin-history-link:hover { border-color: #a9bee4; background: #f8fbff; }
+.checkin-history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 7px; }
+.checkin-history-card h2 { font-size: 16px; font-weight: 690; overflow-wrap: anywhere; }
+.checkin-history-empty { justify-items: center; padding-block: 24px; }
+.checkin-history-empty > span { color: #2356bf; font-size: 26px; }
 </style>

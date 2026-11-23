@@ -65,8 +65,8 @@ const { data: site } = useSiteSettings()
           <UIcon name="i-lucide-chevron-right" aria-hidden="true" />
         </NuxtLink>
         <NuxtLink class="profile-link" :to="session?.account ? '/mine/check-ins' : attendeeLogin('/mine/check-ins')">
-          <UIcon name="i-lucide-scan-line" aria-hidden="true" />
-          <span>待签到</span>
+          <UIcon name="i-lucide-list-checks" aria-hidden="true" />
+          <span>签到记录</span>
           <UIcon name="i-lucide-chevron-right" aria-hidden="true" />
         </NuxtLink>
 

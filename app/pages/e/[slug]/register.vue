@@ -132,7 +132,7 @@ async function copy() {
 </template>
 
 <style scoped>
-.signup-sms-hint { margin-bottom: 14px; }
+.signup-sms-hint { padding: 12px var(--attendee-form-gutter) 0; }
 .signup-receipt-heading { display: flex; align-items: center; gap: 12px; }
 .signup-receipt-heading .attendee-result-icon { flex: none; width: 44px; height: 44px; font-size: 23px; }
 .signup-receipt-heading .attendee-subheading { margin-top: 2px; }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { displayDate, isContentField, isFileField, type Field, type Registration } from '#shared/models'
+import { attendeeCheckinSourceLabel, attendeeCheckinSources, displayDate, isContentField, isFileField, type Field, type Registration } from '#shared/models'
 import { materialImagePreviewUrl } from '#shared/materials'
 
 definePageMeta({ layout: false, pageTransition: false, key: route => route.path })
@@ -31,8 +31,8 @@ const heading = ref<HTMLElement>()
 
 async function recovered(registration: Registration) {
   data.value = { registration }
-  if (event.value) event.value = { ...event.value, recognized: true }
-  clearNuxtData(['attendee-account-registrations', 'attendee-pending-checkins'])
+  if (event.value) event.value = { ...event.value, recognized: true, checkedInSources: attendeeCheckinSources(registration.attendance) }
+  clearNuxtData(['attendee-account-registrations', 'attendee-pending-checkins', 'attendee-checkin-history'])
   status.value = '已找回报名记录。'
   await navigateTo(path + '/record', { replace: true })
   void nextTick(() => heading.value?.focus())
@@ -95,6 +95,7 @@ const attachmentLink = (id: string) => attendeeApi(slug, 'attachment') + '?id=' 
                 <div>
                   <strong>{{ item.title }}</strong>
                   <time v-if="item.checkedAt" :datetime="item.checkedAt" class="attendee-helper">{{ displayDate(item.checkedAt) }}</time>
+                  <span v-if="item.source" class="attendee-helper">{{ attendeeCheckinSourceLabel(item.source) }}</span>
                 </div>
                 <NuxtLink v-if="!item.checkedAt && directPoints.has(item.id)" class="attendee-top-link"
                   :to="{ path: path + '/check-in', query: { point: item.id } }">手机签到</NuxtLink>

@@ -1,6 +1,6 @@
 :root {
-  --qm-attendee-page-width: 744px;
-  --qm-attendee-page-gutter: clamp(16px, 3.7vw, 24px);
+  --qm-attendee-focus-border: #5683cc;
+  --qm-attendee-focus-shadow: 0 0 0 2px rgb(61 109 204 / 16%);
 }
 html.qm-attendee-page {
   min-width: 0;
@@ -53,6 +53,14 @@ html.qm-attendee-page body { overflow-x: clip; }
 }
 .attendee-input-form input:read-only:not([type='radio']):not([type='checkbox']) { background: #f1f5fc; color: #4a5975; }
 .attendee-input-form textarea { min-height: 104px; resize: vertical; }
+.attendee-input-form :is(input:not([type='radio']):not([type='checkbox']):not([type='file']), textarea):focus {
+  outline: none; border-color: var(--qm-attendee-focus-border); box-shadow: var(--qm-attendee-focus-shadow);
+}
+@media (forced-colors: active) {
+  .attendee-input-form :is(input:not([type='radio']):not([type='checkbox']):not([type='file']), textarea):focus {
+    outline: 2px solid Highlight; outline-offset: -1px;
+  }
+}
 .attendee-input-form label.attendee-option { display: flex; align-items: center; gap: 9px; min-height: 43px; padding: 8px 10px; border: 1px solid #dce6f5; border-radius: 9px; font-weight: 500; }
 .attendee-input-form label.attendee-option:has(:checked) { border-color: #8babf4; background: #f1f5ff; color: var(--attendee-dark-blue); }
 .attendee-input-form input:is([type='radio'], [type='checkbox']) { width: 17px; height: 17px; flex: none; accent-color: var(--attendee-blue); }

@@ -22,6 +22,16 @@ export default defineEventHandler(async (event) => {
       const account = await requireAttendeeAccount(event)
       return listAccountPendingCheckins(event, account.id)
     }
+    if (action === 'check-in-history') {
+      const account = await requireAttendeeAccount(event)
+      const id = getQuery(event).id
+      if (id !== undefined) {
+        const [record] = await listAccountCheckinHistory(event, account.id, positive(id))
+        if (!record) fail(404, '找不到签到记录')
+        return record
+      }
+      return listAccountCheckinHistory(event, account.id)
+    }
   }
   if (method === 'POST') {
     sameOrigin(event)

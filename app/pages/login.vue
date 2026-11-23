@@ -105,7 +105,7 @@ async function sendCode() {
     const response = await $fetch<{ retryAfter: number }>('/api/account/code', {
       method: 'POST', body: { ...destination, intent: intent.value },
     })
-    notice.value = '验证码已发送，5 分钟内有效。'
+    notice.value = '验证码已提交发送，5 分钟内有效。'
     const until = Date.now() + response.retryAfter * 1000
     cooldown.value = response.retryAfter
     clearInterval(timer)
@@ -313,7 +313,10 @@ onBeforeUnmount(() => clearInterval(timer))
 .client-auth-heading + .client-auth-form, .client-auth-context + .client-auth-form { margin-top: 14px; }
 /* Input layout adapted from QiCore CoreLogin.vue. See NOTICE-QICORE. */
 .entry-input { display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 0 11px; border: 1px solid #e6ecf5; border-radius: 8px; background: #f5f7fb; color: #526889; }
-.entry-input:focus-within { box-shadow: 0 0 0 2px #c6d9ff; border-color: #5085ed; }
+.entry-input:focus-within { box-shadow: var(--qm-attendee-focus-shadow); border-color: var(--qm-attendee-focus-border); }
+@media (forced-colors: active) {
+  .entry-input:focus-within { outline: 2px solid Highlight; outline-offset: -1px; }
+}
 .entry-input > span { flex: none; font-size: 18px; }
 .entry-input input { align-self: stretch; flex: 1 1 0; min-width: 0; background: transparent; border: 0; outline: none; color: var(--ink); font-size: 16px; }
 .entry-input input::placeholder { color: #62728d; }

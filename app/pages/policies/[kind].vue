@@ -58,7 +58,7 @@ else setAttendeeErrorStatus(error.value)
 </template>
 
 <style scoped>
-.policy-screen { min-height: 100svh; padding: 18px 18px 30px; width: min(100%, 780px); margin-inline: auto; }
+.policy-screen { min-height: 100svh; padding: 18px var(--qm-attendee-page-gutter) 30px; width: min(100%, 780px); margin-inline: auto; }
 .policy-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 15px; }
 .policy-brand { display: flex; align-items: center; gap: 7px; min-width: 0; color: #192e60; font-weight: 720; }
 .policy-brand img { width: 28px; height: 28px; object-fit: contain; flex: none; }
@@ -67,5 +67,4 @@ else setAttendeeErrorStatus(error.value)
 .policy-body > .page-title { margin-bottom: 17px; }
 .policy-note { color: var(--muted); }
 .policy-footer { margin-top: 16px; color: var(--muted); font-size: 13px; }
-@media (max-width: 640px) { .policy-screen { padding-inline: 14px; } }
 </style>

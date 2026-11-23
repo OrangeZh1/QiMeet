@@ -46,10 +46,6 @@ const activeItem = computed(() => {
           <span>{{ site.title }}</span>
         </NuxtLink>
         <span v-if="eventPage || toolbarTitle" class="event-toolbar-title">{{ toolbarTitle || '活动详情' }}</span>
-        <NuxtLink v-if="onRecord" :to="path" class="attendee-top-link">
-          <UIcon name="i-lucide-calendar-days" aria-hidden="true" />
-          活动详情
-        </NuxtLink>
         <slot name="header-tools" />
       </div>
     </header>

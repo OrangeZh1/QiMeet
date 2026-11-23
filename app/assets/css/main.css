@@ -9,6 +9,8 @@
   --page: #f3f6fb;
   --forest: #163474;
   --jade: #245bc9;
+  --qm-attendee-page-width: 744px;
+  --qm-attendee-page-gutter: clamp(16px, 3.7vw, 24px);
   --qm-page-title-size: 20px;
   --qm-page-title-line: 1.35;
   --qm-page-title-weight: 700;

@@ -92,7 +92,7 @@ async function save() {
       </div>
     </div>
     <p v-if="error" class="attendee-error" role="alert">{{ error }}</p>
-    <p v-else-if="sentTo && sentTo === identifier" class="attendee-notice" role="status">验证码已发送，5 分钟内有效。</p>
+    <p v-else-if="sentTo && sentTo === identifier" class="attendee-notice" role="status">验证码已提交发送，5 分钟内有效。</p>
     <UButton type="submit" class="attendee-action contact-save" :loading="saving" :disabled="sending || !readyToSave">
       {{ verifyCurrent ? '确认验证' : currentContact ? '确认更换' : '确认绑定' }}
     </UButton>
@@ -121,8 +121,14 @@ async function save() {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch;
   border: 1px solid #cad7eb; border-radius: 9px; background: #fff;
 }
+.contact-code-row:focus-within { border-color: var(--qm-attendee-focus-border); box-shadow: var(--qm-attendee-focus-shadow); }
 .attendee-input-form .contact-code-input:not([type='radio']):not([type='checkbox']) {
   min-width: 0; min-height: calc(var(--contact-control-height) - 2px); border: 0; background: transparent;
+}
+.attendee-input-form .contact-code-input:not([type='radio']):not([type='checkbox']):focus { outline: none; box-shadow: none; }
+.contact-send:focus-visible { outline-offset: -3px; }
+@media (forced-colors: active) {
+  .contact-code-row:focus-within { outline: 2px solid Highlight; outline-offset: -1px; }
 }
 .contact-send {
   min-height: calc(var(--contact-control-height) - 2px); inline-size: 112px; padding-inline: 10px;

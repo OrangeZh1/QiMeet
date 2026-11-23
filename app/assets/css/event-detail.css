@@ -1,7 +1,7 @@
 .attendee-shell--event {
-  --event-width: 744px;
+  --event-width: var(--qm-attendee-page-width);
   --event-dock-space: 63px;
-  --event-gutter: clamp(16px, 3.7vw, 24px);
+  --event-gutter: var(--qm-attendee-page-gutter);
   --event-line: #edf0f4;
   --event-rule: #f3f5f8;
   --event-blue: #2356bf;
@@ -29,7 +29,7 @@
 }
 .attendee-shell--event .attendee-footer {
   width: min(100%, var(--event-width)); align-self: center; background: #fff; border-color: var(--event-line);
-  padding: 10px 16px calc(var(--event-dock-space) + 10px + env(safe-area-inset-bottom, 0px)); font-size: 12px;
+  padding: 10px var(--event-gutter) calc(var(--event-dock-space) + 10px + env(safe-area-inset-bottom, 0px)); font-size: 12px;
 }
 .event-detail { padding-bottom: calc(var(--event-dock-space) + env(safe-area-inset-bottom, 0px)); }
 .attendee-shell--event.attendee-shell--has-footer .event-detail { padding-bottom: 0; }
@@ -82,6 +82,8 @@
   background: #fff; box-shadow: 0 -6px 16px rgb(24 38 65 / 5%);
 }
 .event-action-bar-paired { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 8px; }
+.event-action-bar-three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.event-action-bar-three .event-enroll-action { font-size: 14px; padding-inline: 4px; line-height: 1.25; }
 .event-enroll-action {
   width: 100%; min-height: 44px; display: flex; align-items: center; justify-content: center;
   border-radius: 7px; color: #fff; background: var(--event-blue);

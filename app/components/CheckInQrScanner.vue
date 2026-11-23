@@ -91,16 +91,25 @@ onBeforeUnmount(() => {
 <template>
   <div class="check-in-scanner">
     <video v-show="scanning" ref="video" playsinline muted aria-label="签到码扫描预览" />
+    <div v-if="!scanning" class="check-in-scanner-idle">
+      <span><UIcon name="i-lucide-qr-code" aria-hidden="true" /></span>
+      <p>打开相机，对准主办方提供的签到码。</p>
+    </div>
     <div class="check-in-scanner-actions">
       <UButton v-if="!scanning" type="button" icon="i-lucide-camera" :loading="starting" @click="start">打开相机</UButton>
       <UButton v-if="scanning || starting" type="button" color="neutral" variant="outline" @click="stop">关闭相机</UButton>
     </div>
-    <p v-if="message" class="attendee-helper" role="status">{{ message }}</p>
+    <p v-if="message" class="attendee-helper check-in-scanner-note" role="status">{{ message }}</p>
   </div>
 </template>
 
 <style scoped>
-.check-in-scanner { display: grid; gap: 10px; }
+.check-in-scanner { display: grid; justify-items: center; gap: 14px; }
 .check-in-scanner video { width: 100%; max-height: 300px; border-radius: 10px; background: #132341; }
-.check-in-scanner-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.check-in-scanner-idle { display: grid; justify-items: center; gap: 10px; text-align: center; }
+.check-in-scanner-idle > span { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 12px; background: #eaf1ff; color: #2356bf; font-size: 24px; }
+.check-in-scanner-idle p { font-size: 14px; }
+.check-in-scanner-actions { width: min(100%, 18rem); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.check-in-scanner-actions > button { flex: 1 1 120px; min-height: 44px; justify-content: center; }
+.check-in-scanner-note { text-align: center; }
 </style>

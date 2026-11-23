@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { displayDate, type CheckInIssue, type Checkpoint, type Registration } from '#shared/models'
+import { attendeeCheckinSourceLabel, attendeeCheckinSources, displayDate, type CheckInIssue, type CheckinSource, type Checkpoint, type Registration } from '#shared/models'
 import { materialImagePreviewUrl } from '#shared/materials'
 
 definePageMeta({ layout: false, pageTransition: false, key: route => route.fullPath })
@@ -13,7 +13,7 @@ const pageTitle = direct ? '手机签到' : '现场签到'
 useSeoMeta({ title: () => event.value ? pageTitle + ' · ' + event.value.conference.title : pageTitle })
 setAttendeeErrorStatus(eventError.value)
 
-type Preview = { checkpoint: Checkpoint, recognized: boolean, checkedAt: string | null, name: string | null }
+type Preview = { checkpoint: Checkpoint, recognized: boolean, checkedAt: string | null, name: string | null, source: CheckinSource | null }
 const { data: initial, error: previewError } = await useAsyncData('attendee-check-in:' + route.path + ':' + JSON.stringify(checkinQuery), async () => {
   if (!event.value || !checkinQuery) return { preview: null }
   return { preview: await request<Preview>(attendeeApi(slug, 'check-in'), { query: checkinQuery }) }
@@ -36,15 +36,17 @@ const unavailable = computed(() => !event.value || event.value.conference.endedA
 const resultHeading = ref<HTMLElement>()
 
 function recovered(registration: Registration) {
+  if (event.value) event.value = { ...event.value, recognized: true, checkedInSources: attendeeCheckinSources(registration.attendance) }
   if (preview.value) {
+    const attendance = registration.attendance.find(item => item.id === preview.value?.checkpoint.id)
     preview.value = {
       ...preview.value, recognized: true, name: registration.name,
-      checkedAt: registration.attendance.find(item => item.id === preview.value?.checkpoint.id)?.checkedAt || null,
+      checkedAt: attendance?.checkedAt ?? null, source: attendance?.source ?? null,
     }
   }
   switching.value = false
   error.value = ''
-  clearNuxtData(['attendee-record:' + slug, 'attendee-account-registrations', 'attendee-pending-checkins'])
+  clearNuxtData(['attendee-record:' + slug, 'attendee-account-registrations', 'attendee-pending-checkins', 'attendee-checkin-history'])
   void nextTick(() => resultHeading.value?.focus())
 }
 
@@ -53,11 +55,12 @@ async function checkIn() {
   confirming.value = true
   error.value = ''
   try {
-    const result = await $fetch<{ checkedAt: string }>(attendeeApi(slug, 'check-in'), {
+    const result = await $fetch<{ checkedAt: string, source: CheckinSource }>(attendeeApi(slug, 'check-in'), {
       method: 'POST', body: checkinQuery,
     })
-    preview.value = { ...preview.value, checkedAt: result.checkedAt }
-    clearNuxtData(['attendee-record:' + slug, 'attendee-account-registrations', 'attendee-pending-checkins'])
+    preview.value = { ...preview.value, checkedAt: result.checkedAt, source: result.source }
+    if (event.value) event.value = { ...event.value, checkedInSources: { ...event.value.checkedInSources, [preview.value.checkpoint.id]: result.source } }
+    clearNuxtData(['attendee-record:' + slug, 'attendee-account-registrations', 'attendee-pending-checkins', 'attendee-checkin-history'])
     void nextTick(() => resultHeading.value?.focus())
   } catch (cause) {
     const status = attendeeErrorStatus(cause)
@@ -115,6 +118,7 @@ async function checkIn() {
           <dl v-if="preview.name || preview.checkedAt" class="attendee-answers">
             <div v-if="preview.name" class="attendee-answer-row"><dt>报名姓名</dt><dd>{{ preview.name }}</dd></div>
             <div v-if="preview.checkedAt" class="attendee-answer-row"><dt>签到时间</dt><dd><time :datetime="preview.checkedAt">{{ displayDate(preview.checkedAt) }}</time></dd></div>
+            <div v-if="preview.source" class="attendee-answer-row"><dt>签到方式</dt><dd>{{ attendeeCheckinSourceLabel(preview.source) }}</dd></div>
           </dl>
           <div class="checkin-actions">
             <UButton v-if="!preview.checkedAt" type="button" class="attendee-action checkin-primary" :loading="confirming" @click="checkIn">确认签到</UButton>

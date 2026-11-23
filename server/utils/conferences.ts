@@ -1,6 +1,6 @@
 import type { PoolConnection } from 'mysql2/promise'
 import type { Attendance, Checkpoint, Conference, FormVersion } from '#shared/models'
-import type { AccountPendingCheckin, AccountRegistration, AttendeeActivityCard } from '#shared/attendee-account'
+import type { AccountCheckinRecord, AccountPendingCheckin, AccountRegistration, AttendeeActivityCard } from '#shared/attendee-account'
 import type { RequestEvent } from './security'
 
 type ConferenceRow = Omit<Conference, 'coverImages'> & { coverIds: string | null }
@@ -87,6 +87,18 @@ export async function listAccountPendingCheckins(event: RequestEvent, accountId:
     scope.params,
   )
   return items.map(item => ({ ...item, startsAt: iso(item.startsAt), endsAt: iso(item.endsAt), directEnabled: Boolean(item.directEnabled) }))
+}
+
+export async function listAccountCheckinHistory(event: RequestEvent, accountId: number, checkpointId?: number) {
+  const scope = await attendeeRegistrationScope(event, accountId)
+  const target = checkpointId === undefined ? '' : ' AND p.id=?'
+  const history = await rows<AccountCheckinRecord>(
+    'SELECT e.title AS eventTitle,p.id AS checkpointId,p.title AS checkpointTitle,c.checked_at AS checkedAt,c.source ' +
+    'FROM registrations r JOIN events e ON e.id=r.event_id JOIN checkins c ON c.registration_id=r.id ' +
+    'JOIN checkpoints p ON p.id=c.checkpoint_id AND p.event_id=e.id WHERE ' + scope.where +
+    ' AND e.published=1 AND e.deleted_at IS NULL' + target + ' ORDER BY c.checked_at DESC,c.checkpoint_id DESC',
+    checkpointId === undefined ? scope.params : [...scope.params, checkpointId])
+  return history.map(item => ({ ...item, checkedAt: iso(item.checkedAt) }))
 }
 
 const formColumns = 'id,version,fields,identity_purpose AS identityPurpose,legacy_contact AS legacyContact'

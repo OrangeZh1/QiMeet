@@ -58,6 +58,9 @@ export type Checkpoint = { id: number, title: string, startsAt: string, endsAt: 
 export const checkinSourceLabels = { fixed: '固定码', dynamic: '动态码', direct: '手机签到', manual: '人工补签' } as const
 export type CheckinSource = keyof typeof checkinSourceLabels
 export type Attendance = { id: number, title: string, checkedAt: string | null, source: CheckinSource | null }
+export const attendeeCheckinSourceLabel = (source: CheckinSource) => source === 'fixed' || source === 'dynamic' ? '现场扫码签到' : checkinSourceLabels[source]
+export const attendeeCheckinSources = (attendance: Attendance[]): Partial<Record<number, CheckinSource>> =>
+  Object.fromEntries(attendance.flatMap(item => item.source ? [[item.id, item.source] as const] : []))
 export type Answer = string | string[]
 export type Attachment = { id: string, fieldId: string, filename: string, byteCount: number }
 export type Registration = {
@@ -75,7 +78,7 @@ export type Registration = {
   fullAccess: boolean
   attendance: Attendance[]
 }
-export type EventDetails = { conference: Conference, form: FormVersion, registrationOpen: boolean, checkpoints: Checkpoint[], recognized: boolean, signedIn: boolean }
+export type EventDetails = { conference: Conference, form: FormVersion, registrationOpen: boolean, checkpoints: Checkpoint[], recognized: boolean, signedIn: boolean, checkedInSources: Partial<Record<number, CheckinSource>> }
 export type RegistrationSmsStatus = 'submitted' | 'missing-phone' | 'form-phone-unverified' | 'missing-template-values' | 'failed'
 export type EventListItem = Conference & { registered: number, attended: number }
 export type RegistrantRow = Pick<Registration, 'id' | 'name' | 'phone' | 'createdAt' | 'edits'> & { version: number, attendance: Attendance[] }

@@ -1,4 +1,4 @@
-import type { Conference, EventDetails, Field } from '#shared/models'
+import type { CheckinSource, Conference, EventDetails, Field } from '#shared/models'
 import type { StoredRegistration } from '#server/utils/registrations'
 import type { RequestEvent } from '#server/utils/security'
 
@@ -17,12 +17,17 @@ async function details(event: RequestEvent, slug: string): Promise<EventDetails 
     first('SELECT 1 FROM registrations WHERE event_id=? AND name IS NOT NULL AND phone IS NOT NULL LIMIT 1', [conference.id]),
   ])
   const session = await findQiSession(event, conference.id, account?.id)
+  const checkedIn = session?.registrationId ? await rows<{ id: number, source: CheckinSource }>(
+    'SELECT c.checkpoint_id AS id,c.source FROM checkins c JOIN checkpoints p ON p.id=c.checkpoint_id WHERE c.registration_id=? AND p.event_id=?',
+    [session.registrationId, conference.id],
+  ) : []
   const configuredIdentity = form.legacyContact || (
     form.fields.some(field => field.contactRole === 'name') && form.fields.some(field => field.contactRole === 'phone')
   )
   return {
     conference, form, registrationOpen: registrationOpen(conference), recognized: Boolean(session?.registrationId), signedIn: Boolean(account),
     identityRecovery: configuredIdentity || Boolean(identityLookup),
+    checkedInSources: Object.fromEntries(checkedIn.map(item => [item.id, item.source])),
     checkpoints: checkpoints.map(({ id, title, startsAt, endsAt, qrMode, directEnabled }) => ({ id, title, startsAt, endsAt, qrMode, directEnabled })),
   }
 }
@@ -174,8 +179,8 @@ async function checkin(event: RequestEvent, slug: string, method: 'GET' | 'POST'
     else verifyDirectCheckpoint(checkpoint)
     const account = await getAttendeeAccount(event)
     const session = await findQiSession(event, conference.id, account?.id)
-    const record = session?.registrationId ? await first<{ name: string | null, checkedAt: string | null }>(
-      'SELECT r.name,c.checked_at AS checkedAt FROM registrations r LEFT JOIN checkins c ' +
+    const record = session?.registrationId ? await first<{ name: string | null, checkedAt: string | null, source: CheckinSource | null }>(
+      'SELECT r.name,c.checked_at AS checkedAt,c.source FROM registrations r LEFT JOIN checkins c ' +
       'ON c.registration_id=r.id AND c.checkpoint_id=? WHERE r.event_id=? AND r.id=?',
       [checkpoint.id, conference.id, session.registrationId],
     ) : undefined
@@ -185,6 +190,7 @@ async function checkin(event: RequestEvent, slug: string, method: 'GET' | 'POST'
       recognized: Boolean(record),
       name: record?.name || null,
       checkedAt: record?.checkedAt ? iso(record.checkedAt) : null,
+      source: record?.source ?? null,
     }
   }
 
