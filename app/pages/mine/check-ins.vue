@@ -29,7 +29,10 @@ const isOpen = (item: AccountPendingCheckin) => Date.parse(item.startsAt) <= now
         <button type="button" :aria-pressed="method === 'phone'" @click="method = 'phone'">手机签到</button>
         <button type="button" :aria-pressed="method === 'scan'" @click="method = 'scan'">扫码签到</button>
       </div>
-      <p v-if="method === 'scan'" class="attendee-helper">请用微信扫一扫或手机相机扫描主办方提供的现场签到码。</p>
+      <template v-if="method === 'scan'">
+        <p class="attendee-helper">扫描主办方提供的现场签到码，也可以用微信扫一扫。</p>
+        <CheckInQrScanner />
+      </template>
       <p v-if="error" class="attendee-error" role="alert">{{ errorText(error, '暂时无法读取待签到环节') }}</p>
       <ul v-else-if="visible.length" class="pending-list">
         <li v-for="item in visible" :key="item.checkpointId" class="pending-card">

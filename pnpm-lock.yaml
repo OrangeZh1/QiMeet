@@ -26,6 +26,9 @@ importers:
       file-type:
         specifier: ^21.3.0
         version: 21.3.4(supports-color@10.2.2)
+      jsqr:
+        specifier: 1.4.0
+        version: 1.4.0
       marked:
         specifier: 17.0.6
         version: 17.0.6
@@ -3089,6 +3092,9 @@ packages:
     resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
     engines: {node: '>=6'}
     hasBin: true
+
+  jsqr@1.4.0:
+    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
 
   kitx@2.2.0:
     resolution: {integrity: sha512-tBMwe6AALTBQJb0woQDD40734NKzb0Kzi3k7wQj9ar3AbP9oqhoVrdXPh7rk2r00/glIgd0YbToIUJsnxWMiIg==}
@@ -8206,6 +8212,8 @@ snapshots:
       bignumber.js: 9.3.1
 
   json5@2.2.3: {}
+
+  jsqr@1.4.0: {}
 
   kitx@2.2.0:
     dependencies:

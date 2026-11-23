@@ -60,7 +60,7 @@ function saved(result: { registration: Registration, credential?: string, smsSta
       identityRecovery: data.value.identityRecovery || Boolean(result.registration.name && result.registration.phone),
     }
   }
-  clearNuxtData(['attendee-record:' + slug, 'attendee-pending-checkins'])
+  clearNuxtData(['attendee-record:' + slug, 'attendee-account-registrations', 'attendee-pending-checkins'])
 }
 async function copy() {
   if (copying.value) return
@@ -110,7 +110,7 @@ async function copy() {
         </p>
         <div class="attendee-actions">
           <UButton v-if="returnToCheckIn" :to="returnToCheckIn" class="attendee-action">继续签到</UButton>
-          <UButton v-else :to="path + '/record'" class="attendee-action">查看我的报名</UButton>
+          <UButton v-else :to="path + '/record'" class="attendee-action">查看报名详情</UButton>
         </div>
       </section>
 

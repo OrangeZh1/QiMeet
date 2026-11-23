@@ -66,3 +66,16 @@ export function isPublicAttendeeHistory(value: unknown) {
   const path = value.split(/[?#]/, 1)[0] || ''
   return ['/', '/activities', '/mine', '/mine/registrations', '/mine/recover', '/mine/check-in-help'].includes(path) || /^\/e\/[a-z0-9-]+$/.test(path)
 }
+
+export function scannedCheckInPath(value: string, origin: string) {
+  if (value.length > 512) return
+  try {
+    const url = new URL(value)
+    if (url.origin !== origin || url.username || url.password || !/^\/e\/[a-z0-9-]+\/check-in$/.test(url.pathname)) return
+    const [code, duplicate] = url.searchParams.getAll('q')
+    if (duplicate !== undefined || !code || code.length > 150 || !/^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]{43}$/.test(code)) return
+    return url.pathname + '?q=' + code
+  } catch {
+    return
+  }
+}

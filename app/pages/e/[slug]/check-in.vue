@@ -57,7 +57,7 @@ async function checkIn() {
       method: 'POST', body: checkinQuery,
     })
     preview.value = { ...preview.value, checkedAt: result.checkedAt }
-    clearNuxtData(['attendee-record:' + slug, 'attendee-pending-checkins'])
+    clearNuxtData(['attendee-record:' + slug, 'attendee-account-registrations', 'attendee-pending-checkins'])
     void nextTick(() => resultHeading.value?.focus())
   } catch (cause) {
     const status = attendeeErrorStatus(cause)

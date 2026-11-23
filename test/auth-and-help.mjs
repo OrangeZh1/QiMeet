@@ -5,7 +5,17 @@ import { renderToString } from 'vue/server-renderer'
 import { createPasswordHash, signInAdmin } from '../server/utils/security.ts'
 import { markdownNodes } from '../shared/markdown.ts'
 import { markdownParts, markdownQuestions } from '../shared/markdown-tokens.ts'
-import { detectAttendeeContact } from '../shared/attendee-account.ts'
+import { detectAttendeeContact, scannedCheckInPath } from '../shared/attendee-account.ts'
+
+test('扫码只打开本站的活动签到链接', () => {
+  const origin = 'https://example.test'
+  const code = 'test-payload.' + 'a'.repeat(43)
+  const path = '/e/fixture/check-in?q=' + code
+  assert.equal(scannedCheckInPath(origin + path, origin), path)
+  assert.equal(scannedCheckInPath('https://elsewhere.test' + path, origin), undefined)
+  assert.equal(scannedCheckInPath(origin + path + '&q=' + code, origin), undefined)
+  assert.equal(scannedCheckInPath(origin + '/login?q=' + code, origin), undefined)
+})
 
 test('统一账号输入识别中国大陆手机号和邮箱，并拒绝无法识别的值', () => {
   assert.deepEqual(detectAttendeeContact('13900000000'), { kind: 'phone', identifier: '13900000000' })
