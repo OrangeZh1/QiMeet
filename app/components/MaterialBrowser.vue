@@ -63,7 +63,7 @@ const deleteOpen = ref(false)
 const deleteTarget = ref<Material>()
 const deleting = ref(false)
 const deleteError = ref('')
-const view = ref<'grid' | 'list'>('list')
+const view = ref<'grid' | 'list'>('grid')
 const totalPages = computed(() => Math.max(1, Math.ceil(result.value.total / 12)))
 let latestRequest = 0
 
