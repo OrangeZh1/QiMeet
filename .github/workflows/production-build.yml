@@ -40,14 +40,14 @@ jobs:
           pid=''
           trap 'if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi; rm -r -- "$smoke"' EXIT
           tar -xzf qimeet-linux.tar.gz -C "$smoke"
-          node --input-type=commonjs - "$smoke/.output/server/index.mjs" <<'NODE'
-          const { createRequire } = require('node:module')
-          const sharp = createRequire(process.argv[2])('sharp')
-          sharp({ create: { width: 8, height: 8, channels: 3, background: '#fff' } })
-            .webp().toBuffer().then((image) => {
-              if (image.subarray(8, 12).toString() !== 'WEBP') throw new Error('Invalid bundled WebP encoder')
-            }).catch((error) => { console.error(error); process.exitCode = 1 })
+          (
+          cd "$smoke/.output/server"
+          node --input-type=module <<'NODE'
+          import sharp from 'sharp'
+          const image = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#fff' } }).webp().toBuffer()
+          if (image.subarray(8, 12).toString() !== 'WEBP') throw new Error('Invalid bundled WebP encoder')
           NODE
+          )
           NITRO_HOST=127.0.0.1 NITRO_PORT=3086 node "$smoke/.output/server/index.mjs" > "$smoke/startup.log" 2>&1 &
           pid=$!
           for attempt in {1..30}; do
