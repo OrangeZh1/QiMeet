@@ -33,6 +33,7 @@ button:not(:disabled), a { cursor: pointer; }
 .page-heading-row, .split-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
 .page-heading h1, .page-title { margin: 0; font-size: var(--qm-page-title-size); line-height: var(--qm-page-title-line); font-weight: var(--qm-page-title-weight); letter-spacing: normal; overflow-wrap: anywhere; }
 .page-back-icon { display: inline-grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 8px; color: var(--jade); font-size: 21px; -webkit-tap-highlight-color: transparent; }
+a.page-back-icon[href]:is(:hover, :active) { background-color: transparent; }
 .page-heading p { margin: 3px 0 0; color: var(--muted); font-size: 15px; }
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; }
 .metric-card { border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: grid; grid-template-columns: 1fr auto; gap: 6px 9px; background: var(--surface); }
