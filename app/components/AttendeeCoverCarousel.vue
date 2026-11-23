@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { materialImagePreviewUrl } from '#shared/materials'
+
 const props = withDefaults(defineProps<{
   images: { id: string, url: string, title?: string, subtitle?: string }[], label?: string, fallbackUrl?: string,
 }>(), { label: '活动封面' })
@@ -63,7 +65,7 @@ onBeforeUnmount(() => clearInterval(timer))
       @scroll.passive="sync" @keydown.left.prevent="move(-1)" @keydown.right.prevent="move(1)">
       <div v-for="(image, index) in images" :key="image.id + image.url" class="attendee-cover-slide"
         :aria-hidden="images.length > 1 && index !== active ? 'true' : undefined">
-        <img :src="image.url" alt="" :loading="index === 0 ? 'eager' : 'lazy'" :fetchpriority="index === 0 ? 'high' : 'auto'"
+        <img :src="materialImagePreviewUrl(image.url, 'display')" alt="" :loading="index === 0 ? 'eager' : 'lazy'" :fetchpriority="index === 0 ? 'high' : 'auto'"
           referrerpolicy="no-referrer" draggable="false" @error="loadFallback" />
         <slot name="slide" :image="image" />
       </div>

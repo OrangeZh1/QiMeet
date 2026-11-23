@@ -3,13 +3,13 @@ import type { Attendance, Checkpoint, Conference, FormVersion } from '#shared/mo
 import type { AccountPendingCheckin, AccountRegistration, AttendeeActivityCard } from '#shared/attendee-account'
 
 type ConferenceRow = Omit<Conference, 'coverImages'> & { coverIds: string | null }
-const eventColumns = "id,slug,title,organizer,venue,cover_url AS coverUrl,cover_material_id AS coverMaterialId,description,agenda,registration_closed_at AS registrationClosedAt,ended_at AS endedAt,starts_at AS startsAt,ends_at AS endsAt,registration_starts_at AS registrationStartsAt,registration_ends_at AS registrationEndsAt,published,edit_policy AS editPolicy,edit_deadline AS editDeadline,(SELECT GROUP_CONCAT(ec.material_id ORDER BY ec.position) FROM event_covers ec WHERE ec.event_id=e.id) AS coverIds"
+const eventColumns = "id,slug,title,organizer,venue,cover_url AS coverUrl,cover_material_id AS coverMaterialId,description,agenda,registration_closed_at AS registrationClosedAt,ended_at AS endedAt,starts_at AS startsAt,ends_at AS endsAt,registration_starts_at AS registrationStartsAt,registration_ends_at AS registrationEndsAt,published,registration_sms AS registrationSms,edit_policy AS editPolicy,edit_deadline AS editDeadline,(SELECT GROUP_CONCAT(ec.material_id ORDER BY ec.position) FROM event_covers ec WHERE ec.event_id=e.id) AS coverIds"
 function eventDates({ coverIds, ...row }: ConferenceRow, publicView = false): Conference {
   const ids = coverIds ? coverIds.split(',') : row.coverMaterialId ? [row.coverMaterialId] : []
   const prefix = publicView ? '/api/materials/' : '/api/manage/materials/content?id='
   const coverImages = ids.map(id => ({ id, url: prefix + id }))
   return {
-    ...row, published: Boolean(row.published),
+    ...row, published: Boolean(row.published), registrationSms: Boolean(row.registrationSms),
     coverMaterialId: coverImages[0]?.id || null,
     coverUrl: coverImages[0]?.url || row.coverUrl,
     coverImages,

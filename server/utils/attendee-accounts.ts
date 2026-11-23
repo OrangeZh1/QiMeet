@@ -1,19 +1,19 @@
 import type { PoolConnection } from 'mysql2/promise'
 import { randomBytes, randomInt } from 'node:crypto'
-import { accountCookie, adminUserDefaultPageSize, adminUserPageSizes, attendeePasswordMin, attendeePasswordMax, type AccountIntent, type AdminUserPage, type AttendeeAccount, type AttendeeProfile, type ContactKind } from '#shared/attendee-account'
+import { accountCookie, adminUserDefaultPageSize, adminUserPageSizes, attendeeContactPhone, attendeePasswordMin, attendeePasswordMax, type AccountIntent, type AdminUserPage, type AttendeeAccount, type AttendeeProfile, type ContactKind } from '#shared/attendee-account'
 import type { RequestEvent } from './security'
 
 type AccountRow = { id: number, kind: AttendeeAccount['kind'], identifier: string }
 type AccountProfile = { displayName: string, contactPhone: string | null, avatarMaterialId: string | null }
 type AccountAvatar = { id: number, avatarMaterialId: string | null, avatarRevision: number, hasOwnAvatar: number }
-type StoredProfile = AccountRow & AccountAvatar & { displayName: string, hasPassword: number }
+type StoredProfile = AccountRow & AccountAvatar & { displayName: string, hasPassword: number, verifiedPhone: string | null, verifiedEmail: string | null }
 const options = () => ({ path: '/', httpOnly: true, secure: origin().startsWith('https:'), sameSite: 'lax' as const })
 
 export async function getAttendeeAccount(event: RequestEvent) {
   const token = getCookie(event, accountCookie)
   if (!token || !/^[a-zA-Z0-9_-]{43}$/.test(token)) return
   return first<StoredProfile>(
-    'SELECT a.id,a.kind,a.identifier,a.display_name AS displayName,a.avatar_material_id AS avatarMaterialId,' +
+    'SELECT a.id,a.kind,a.identifier,a.display_name AS displayName,a.verified_phone AS verifiedPhone,a.verified_email AS verifiedEmail,a.avatar_material_id AS avatarMaterialId,' +
     'a.avatar_revision AS avatarRevision,(a.avatar_mime IS NOT NULL) AS hasOwnAvatar,(a.password_hash IS NOT NULL) AS hasPassword ' +
     "FROM sessions s JOIN attendee_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.kind='account' AND s.expires_at>UTC_TIMESTAMP(3) AND a.disabled_at IS NULL",
     [hash(token)],
@@ -38,7 +38,11 @@ function attendeeAvatarUrl(account: AccountAvatar) {
 
 export function attendeeProfileView(account: StoredProfile | undefined): AttendeeProfile | null {
   if (!account) return null
-  return { ...accountDisplay(account)!, displayName: account.displayName, avatarUrl: attendeeAvatarUrl(account), hasPassword: Boolean(account.hasPassword) }
+  return {
+    ...accountDisplay(account)!, displayName: account.displayName, avatarUrl: attendeeAvatarUrl(account),
+    hasPassword: Boolean(account.hasPassword), contactPhone: attendeeContactPhone(account),
+    contactPhoneVerified: Boolean(account.verifiedPhone), contactEmail: account.verifiedEmail,
+  }
 }
 
 export async function saveAttendeeDisplayName(event: RequestEvent, input: Record<string, unknown>) {
@@ -224,26 +228,35 @@ export function contactIdentifier(kind: ContactKind, input: unknown) {
   return number
 }
 
-const codeDigest = (kind: ContactKind, identifier: string, intent: AccountIntent, code: string) =>
+type CodePurpose = AccountIntent | `profile:${number}:${string}`
+const codeDigest = (kind: ContactKind, identifier: string, intent: CodePurpose, code: string) =>
   sign(['attendee-code', kind, identifier, intent, code].join(':'))
+const verifiedColumn = (kind: ContactKind) => kind === 'phone' ? 'verified_phone' : 'verified_email'
 
-export async function deliverAttendeeCode(event: RequestEvent, kind: ContactKind, identifier: string, intent: AccountIntent) {
+export async function deliverAttendeeCode(event: RequestEvent, kind: ContactKind, identifier: string, intent: CodePurpose) {
   throttle(event, 'attendee-code:' + kind, 8, 600000)
   const deliver = await attendeeCodeDelivery(kind)
   const code = String(randomInt(100000, 1000000))
   const digest = codeDigest(kind, identifier, intent, code)
   await transaction(async (db) => {
-    const created = await mutate(
-      'INSERT IGNORE INTO attendee_codes VALUES (?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3)+INTERVAL 5 MINUTE,5)',
-      [kind, identifier, digest], db,
+    // Keep one send cooldown per address across all purposes and sessions.
+    await mutate(
+      "INSERT INTO attendee_codes (kind,identifier,digest,sent_at,expires_at,remaining) VALUES (?,?,'',UTC_TIMESTAMP(3)-INTERVAL 60 SECOND,UTC_TIMESTAMP(3),0) " +
+      'ON DUPLICATE KEY UPDATE identifier=identifier',
+      [kind, identifier], db,
     )
-    if (created.affectedRows) return
-    const updated = await mutate(
-      'UPDATE attendee_codes SET digest=?,sent_at=UTC_TIMESTAMP(3),expires_at=UTC_TIMESTAMP(3)+INTERVAL 5 MINUTE,remaining=5 ' +
+    const reserved = await mutate(
+      "UPDATE attendee_codes SET sent_at=UTC_TIMESTAMP(3),expires_at=UTC_TIMESTAMP(3)+INTERVAL 60 SECOND,digest='',remaining=0 " +
       'WHERE kind=? AND identifier=? AND sent_at<=UTC_TIMESTAMP(3)-INTERVAL 60 SECOND',
-      [digest, kind, identifier], db,
+      [kind, identifier], db,
     )
-    if (!updated.affectedRows) fail(429, '请在 60 秒后重新获取验证码')
+    if (!reserved.affectedRows) fail(429, '请在 60 秒后重新获取验证码')
+    await mutate(
+      'INSERT INTO attendee_code_challenges (kind,identifier,purpose_hash,digest,expires_at,remaining) ' +
+      'VALUES (?,?,?,?,UTC_TIMESTAMP(3)+INTERVAL 5 MINUTE,5) ' +
+      'ON DUPLICATE KEY UPDATE digest=?,expires_at=UTC_TIMESTAMP(3)+INTERVAL 5 MINUTE,remaining=5',
+      [kind, identifier, hash(intent), digest, digest], db,
+    )
   })
   try {
     await deliver(identifier, code)
@@ -251,9 +264,23 @@ export async function deliverAttendeeCode(event: RequestEvent, kind: ContactKind
     fail(502, '验证码暂时无法送达，请稍后重试')
   }
   if (randomBytes(1)[0] === 0) {
+    await mutate('DELETE FROM attendee_code_challenges WHERE expires_at<=UTC_TIMESTAMP(3) LIMIT 1000', [])
     await mutate('DELETE FROM attendee_codes WHERE expires_at<=UTC_TIMESTAMP(3) LIMIT 1000', [])
   }
   return { retryAfter: 60 }
+}
+
+async function consumeAttendeeCode(db: PoolConnection, kind: ContactKind, identifier: string, purpose: CodePurpose, code: string) {
+  const params = [kind, identifier, hash(purpose)]
+  const challenge = await first<{ digest: string, remaining: number }>(
+    'SELECT digest,remaining FROM attendee_code_challenges WHERE kind=? AND identifier=? AND purpose_hash=? AND expires_at>UTC_TIMESTAMP(3) FOR UPDATE', params, db,
+  )
+  if (!challenge?.remaining) return '验证码已失效，请重新获取'
+  if (!safeEqual(challenge.digest, codeDigest(kind, identifier, purpose, code))) {
+    await mutate('UPDATE attendee_code_challenges SET remaining=remaining-1 WHERE kind=? AND identifier=? AND purpose_hash=?', params, db)
+    return '验证码错误'
+  }
+  await mutate('DELETE FROM attendee_code_challenges WHERE kind=? AND identifier=? AND purpose_hash=?', params, db)
 }
 
 export async function verifyAttendeeCode(
@@ -263,26 +290,47 @@ export async function verifyAttendeeCode(
   if (!/^\d{6}$/.test(code)) fail(400, '请输入 6 位验证码')
   const newPassword = intent === 'register' ? registrationPassword(password) : undefined
   const result = await transaction(async (db) => {
-    const params = [kind, identifier]
-    const challenge = await first<{ digest: string, remaining: number }>(
-      'SELECT digest,remaining FROM attendee_codes WHERE kind=? AND identifier=? AND expires_at>UTC_TIMESTAMP(3) FOR UPDATE',
-      params, db,
-    )
-    if (!challenge?.remaining) return { error: '验证码已失效，请重新获取' }
-    if (!safeEqual(challenge.digest, codeDigest(kind, identifier, intent, code))) {
-      await mutate('UPDATE attendee_codes SET remaining=remaining-1 WHERE kind=? AND identifier=?', params, db)
-      return { error: '验证码错误' }
-    }
-    await mutate('DELETE FROM attendee_codes WHERE kind=? AND identifier=?', params, db)
-    const existing = await first<AccountRow>('SELECT id,kind,identifier FROM attendee_accounts WHERE kind=? AND identifier=?', params, db)
+    const error = await consumeAttendeeCode(db, kind, identifier, intent, code)
+    if (error) return { error }
+    const existing = await first<AccountRow>('SELECT id,kind,identifier FROM attendee_accounts WHERE kind=? AND identifier=?', [kind, identifier], db)
     if (intent === 'login' && !existing) return { error: '此联系方式尚未注册，请先注册' }
     if (intent === 'register' && existing) return { error: '此联系方式已注册，请直接登录' }
     const id = existing?.id ?? (await createAttendeeAccount(kind, identifier, newPassword, db)).id
+    const column = verifiedColumn(kind)
+    await mutate('UPDATE attendee_accounts SET ' + column + '=? WHERE id=? AND ' + column + ' IS NULL', [identifier, id], db)
     return { account: accountDisplay({ id, kind, identifier }), writeCookie: await createAccountSession(event, id, db) }
   })
   if (!result.writeCookie) fail(400, result.error || '验证失败')
   result.writeCookie()
   return result.account
+}
+
+export async function attendeeContactAction(event: RequestEvent, action: 'contact-code' | 'contact', input: Record<string, unknown>) {
+  const account = await requireAttendeeAccount(event)
+  const kind = oneOf(input.kind, ['phone', 'email'], '联系方式')
+  const identifier = contactIdentifier(kind, input.identifier)
+  const token = hash(getCookie(event, accountCookie)!)
+  const purpose = `profile:${account.id}:${token}` as const
+  if (action === 'contact-code') {
+    throttle(event, 'attendee-contact-code:' + account.id, 8, 600000)
+    return deliverAttendeeCode(event, kind, identifier, purpose)
+  }
+  throttle(event, 'attendee-contact-verify:' + account.id, 15, 300000)
+  const code = text(input.code, 6, '验证码')
+  if (!/^\d{6}$/.test(code)) fail(400, '请输入 6 位验证码')
+  const error = await transaction(async (db) => {
+    const challengeError = await consumeAttendeeCode(db, kind, identifier, purpose, code)
+    if (challengeError) return challengeError
+    const activeAccount = await first('SELECT id FROM attendee_accounts WHERE id=? AND disabled_at IS NULL FOR UPDATE', [account.id], db)
+    const activeSession = activeAccount && await first(
+      "SELECT 1 FROM sessions WHERE kind='account' AND account_id=? AND token_hash=? AND expires_at>UTC_TIMESTAMP(3) FOR UPDATE",
+      [account.id, token], db,
+    )
+    if (!activeSession) fail(401, '登录已过期，请重新登录')
+    await mutate('UPDATE attendee_accounts SET ' + verifiedColumn(kind) + '=? WHERE id=?', [identifier, account.id], db)
+  })
+  if (error) fail(400, error)
+  return kind === 'phone' ? { contactPhone: identifier, contactPhoneVerified: true } : { contactEmail: identifier }
 }
 
 function registrationPassword(value: unknown) {

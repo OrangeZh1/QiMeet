@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { displayDate, isContentField, isFileField, type Field, type Registration } from '#shared/models'
+import { materialImagePreviewUrl } from '#shared/materials'
 
 definePageMeta({ layout: false, pageTransition: false, key: route => route.path })
 const { slug, path, details } = useAttendeeEvent()
@@ -68,7 +69,7 @@ const attachmentLink = (id: string) => attendeeApi(slug, 'attachment') + '?id=' 
       <template v-else>
         <header class="record-event-heading">
           <div class="attendee-event-summary">
-            <img v-if="event.conference.coverUrl" :src="event.conference.coverUrl" class="attendee-event-summary-cover" alt="" width="64" height="48" />
+            <img v-if="event.conference.coverUrl" :src="materialImagePreviewUrl(event.conference.coverUrl)" class="attendee-event-summary-cover" alt="" width="64" height="48" />
             <div>
               <h1 ref="heading" tabindex="-1">{{ event.conference.title }}</h1>
               <time :datetime="event.conference.startsAt">{{ displayDate(event.conference.startsAt) }}</time>

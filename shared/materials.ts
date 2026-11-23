@@ -1,6 +1,14 @@
 export const materialKinds = ['image', 'file', 'video'] as const
 export type MaterialKind = typeof materialKinds[number]
 
+export const materialPreviewSizes = { thumb: 320, display: 1440 } as const
+export type MaterialPreview = keyof typeof materialPreviewSizes
+
+export function materialImagePreviewUrl(url: string, preview: MaterialPreview = 'thumb') {
+  if (!/^\/api\/(?:materials\/[a-f0-9-]+|manage\/materials\/content\?id=[a-f0-9-]+)$/i.test(url)) return url
+  return url + (url.includes('?') ? '&' : '?') + 'preview=' + preview
+}
+
 export const materialPolicy = {
   image: {
     label: '图片', formats: 'JPG、PNG、WebP', accept: '.jpg,.jpeg,.png,.webp', maxMb: 5,

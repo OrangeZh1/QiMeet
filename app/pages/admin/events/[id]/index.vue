@@ -147,6 +147,9 @@ async function updated() {
   toast.add({ title: '活动已保存', color: 'success' })
 }
 function formSaved(form: FormVersion) { data.value?.forms.unshift(form) }
+function registrationSmsSaved(enabled: boolean) {
+  if (data.value) data.value = { ...data.value, conference: { ...data.value.conference, registrationSms: enabled } }
+}
 function agendaSaved(agenda: AdminEvent['conference']['agenda']) {
   if (data.value) data.value = { ...data.value, conference: { ...data.value.conference, agenda } }
 }
@@ -215,7 +218,8 @@ function agendaSaved(agenda: AdminEvent['conference']['agenda']) {
     <EventAnalytics v-if="tab === 'analytics'" :conference="conference" />
     <EventSettings v-else-if="tab === 'settings'" :conference="conference" @saved="updated" />
     <EventAgendaEditor v-else-if="tab === 'agenda'" :event-id="id" :initial="conference.agenda" :starts-at="conference.startsAt" @saved="agendaSaved" />
-    <FormBuilder v-else-if="tab === 'form'" :event-id="id" :forms="data.forms" :activity-title="conference.title" @saved="formSaved" />
+    <FormBuilder v-else-if="tab === 'form'" :event-id="id" :forms="data.forms" :activity-title="conference.title"
+      :registration-sms="conference.registrationSms" @saved="formSaved" @notification-saved="registrationSmsSaved" />
     <div v-else-if="tab === 'checkpoints'" class="page-stack">
       <div class="split-row">
         <p class="help">按环节配置签到时段和现场二维码。</p>

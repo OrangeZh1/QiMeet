@@ -2,8 +2,8 @@
 import { fieldLabels, isContentField, isFileField, legacyContactFields, type Field, type FieldType, type FormVersion } from '#shared/models'
 import ConsoleDialog from './material/ConsoleDialog.vue'
 
-const props = defineProps<{ eventId: number, forms: FormVersion[], activityTitle: string }>()
-const emit = defineEmits<{ saved: [value: FormVersion] }>()
+const props = defineProps<{ eventId: number, forms: FormVersion[], activityTitle: string, registrationSms: boolean }>()
+const emit = defineEmits<{ saved: [value: FormVersion], notificationSaved: [enabled: boolean] }>()
 
 type DraftOption = { id: string, value: string }
 type DraftField = Omit<Field, 'options'> & { options: DraftOption[] }
@@ -41,17 +41,27 @@ const hasOptions = (type: FieldType) => type === 'radio' || type === 'checkbox'
 const roleFor = (type: FieldType): ContactRole | undefined => type === 'text' ? 'name' : type === 'phone' ? 'phone' : undefined
 const roleName = { name: '姓名', phone: '手机号' }
 const roleCaption = { name: '找回用姓名', phone: '找回用手机号' }
+const smsRoleLabel = { name: '用作短信姓名变量', phone: '用作短信收件手机号' }
+const smsRoleCaption = { name: '短信姓名', phone: '短信收件号码' }
 const fieldName = (field: DraftField) => text(field.label) || '未命名' + fieldLabels[field.type]
 const fields = ref(draft(active.value))
+const nameField = computed(() => fields.value.find(field => field.contactRole === 'name')
+  ?? fields.value.find(field => field.type === 'text' && text(field.label) === '姓名'))
 const selectedId = ref<string | null>(fields.value[0]?.id ?? null)
 const selected = computed(() => fields.value.find(field => field.id === selectedId.value))
 const selectedRole = computed(() => selected.value && roleFor(selected.value.type))
 const boundElsewhere = computed(() => fields.value.find(field => selectedRole.value && field.contactRole === selectedRole.value && field.id !== selectedId.value))
+const smsBoundElsewhere = computed(() => fields.value.find(field => selectedRole.value && field.smsRole === selectedRole.value && field.id !== selectedId.value))
 const identityPurpose = ref(active.value.identityPurpose)
 const view = ref<Panel>('canvas')
 const saving = ref(false)
 const feedback = ref('')
 const error = ref('')
+const registrationSms = ref(props.registrationSms)
+const notificationSaving = ref(false)
+const notificationError = ref('')
+const notificationFeedback = ref('')
+watch(registrationSms, () => { notificationFeedback.value = notificationError.value = '' })
 const previewOpen = ref(false)
 const historyOpen = ref(false)
 const historicId = ref<number>()
@@ -65,6 +75,7 @@ const currentFields = computed<Field[]>(() => fields.value.map(field => ({
   id: field.id, type: field.type, label: text(field.label), required: !isContentField(field.type) && field.required,
   options: hasOptions(field.type) ? field.options.map(option => text(option.value)) : [],
   contactRole: field.contactRole === roleFor(field.type) ? field.contactRole : undefined,
+  smsRole: field.smsRole === roleFor(field.type) ? field.smsRole : undefined,
   maxFiles: isFileField(field.type) ? field.maxFiles ?? 1 : undefined,
 })))
 const previewFields = computed(() => currentFields.value.map(field => ({ ...field, options: field.options.filter(Boolean) })))
@@ -73,7 +84,7 @@ const purpose = computed(() => hasIdentity.value ? text(identityPurpose.value) :
 const snapshot = (items: Field[], description: string) => JSON.stringify([
   description, items.map(field => [
     field.id, field.type, field.label, field.required, field.options,
-    field.contactRole, isFileField(field.type) ? field.maxFiles ?? 1 : undefined,
+    field.contactRole, field.smsRole, isFileField(field.type) ? field.maxFiles ?? 1 : undefined,
   ]),
 ])
 const dirty = computed(() => snapshot(currentFields.value, purpose.value) !== snapshot(versionFields(active.value), active.value.identityPurpose))
@@ -86,11 +97,16 @@ function select(id: string) {
 
 function newOption(): DraftOption { return { id: crypto.randomUUID(), value: '' } }
 
-function add(type: FieldType) {
+function add(type: FieldType, preset?: Pick<Field, 'label' | 'required' | 'contactRole'>) {
   if (fields.value.length >= fieldLimit || saving.value) return
   const id = crypto.randomUUID()
-  fields.value.push({ id, type, label: '', required: false, options: hasOptions(type) ? [newOption(), newOption()] : [] })
+  fields.value.push({ id, type, label: '', required: false, options: hasOptions(type) ? [newOption(), newOption()] : [], ...preset })
   select(id)
+}
+
+function addName() {
+  if (nameField.value) select(nameField.value.id)
+  else add('text', { label: '姓名', required: true, contactRole: 'name' })
 }
 
 function duplicateField(index: number) {
@@ -98,7 +114,7 @@ function duplicateField(index: number) {
   if (!source || fields.value.length >= fieldLimit || saving.value) return
   const id = crypto.randomUUID()
   fields.value.splice(index + 1, 0, {
-    ...source, id, contactRole: undefined,
+    ...source, id, contactRole: undefined, smsRole: undefined,
     options: source.options.map(option => ({ id: crypto.randomUUID(), value: option.value })),
   })
   select(id)
@@ -113,11 +129,21 @@ function bindContact(enabled: boolean) {
   field.contactRole = enabled ? role : undefined
 }
 
+function bindSms(enabled: boolean) {
+  const field = selected.value
+  const role = selectedRole.value
+  if (!field || !role) return
+  const previous = smsBoundElsewhere.value
+  if (enabled && previous) previous.smsRole = undefined
+  field.smsRole = enabled ? role : undefined
+}
+
 function changeType(type: FieldType) {
   const field = selected.value
   if (!field) return
   field.type = type
   if (field.contactRole !== roleFor(type)) field.contactRole = undefined
+  if (field.smsRole !== roleFor(type)) field.smsRole = undefined
   if (!isFileField(type)) field.maxFiles = undefined
   if (hasOptions(type) && !field.options.length) field.options = [newOption(), newOption()]
 }
@@ -227,6 +253,23 @@ function showHistory() {
   historicId.value = historyItems.value[0]?.value
   historyOpen.value = true
 }
+
+async function saveNotification() {
+  if (notificationSaving.value || registrationSms.value === props.registrationSms) return
+  notificationSaving.value = true
+  notificationFeedback.value = notificationError.value = ''
+  try {
+    const result = await manageRequest<{ registrationSms: boolean }>('save-registration-sms', {
+      method: 'POST', query: { eventId: props.eventId }, body: { registrationSms: registrationSms.value },
+    })
+    emit('notificationSaved', result.registrationSms)
+    notificationFeedback.value = '报名通知已保存'
+  } catch (cause) {
+    notificationError.value = errorText(cause, '暂时无法保存报名通知')
+  } finally {
+    notificationSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -245,6 +288,18 @@ function showHistory() {
       </div>
 
       <p v-if="error || feedback" class="feedback builder-feedback" :class="{ error }" :role="error ? 'alert' : 'status'">{{ error || feedback }}</p>
+      <section class="builder-notification" :aria-labelledby="editorId + '-notification'">
+        <div>
+          <h3 :id="editorId + '-notification'">报名通知</h3>
+          <USwitch v-model="registrationSms" label="报名成功后发送短信" :disabled="notificationSaving"
+            description="优先使用报名表中的手机号，并核对来宾已验证的号码。短信模板在站点设置中配置。" />
+        </div>
+        <UButton type="button" color="neutral" variant="outline" :loading="notificationSaving"
+          :disabled="registrationSms === props.registrationSms" @click="saveNotification">保存通知设置</UButton>
+        <p v-if="notificationError || notificationFeedback" class="feedback" :class="{ error: notificationError }"
+          :role="notificationError ? 'alert' : 'status'">{{ notificationError || notificationFeedback }}</p>
+      </section>
+
       <nav class="builder-nav" aria-label="报名表编辑分区">
         <button v-for="item in panels" :key="item.id" type="button" :aria-pressed="view === item.id" :aria-controls="editorId + '-' + item.id" @click="view = item.id">
           {{ item.label }}
@@ -258,6 +313,9 @@ function showHistory() {
             <div v-for="group in palette" :key="group.label" class="palette-group">
               <h4>{{ group.label }}</h4>
               <div class="palette-items">
+                <UButton v-if="group.types.includes('text')" type="button" variant="ghost" color="neutral" icon="i-lucide-user-round"
+                  :aria-label="nameField ? '定位姓名字段' : '添加姓名'" :disabled="saving || (!nameField && fields.length >= fieldLimit)"
+                  class="palette-button" @click="addName">姓名</UButton>
                 <UButton v-for="type in group.types" :key="type" type="button" variant="ghost" color="neutral" :icon="icons[type]" :aria-label="'添加' + fieldLabels[type]"
                   :disabled="fields.length >= fieldLimit || saving" class="palette-button" @click="add(type)">
                   {{ fieldLabels[type] }}
@@ -285,7 +343,7 @@ function showHistory() {
                 </span>
                 <button type="button" class="field-select" :aria-pressed="selectedId === field.id" @click="select(field.id)">
                   <span>{{ fieldName(field) }} <i v-if="field.required && !isContentField(field.type)" class="required-mark">*</i></span>
-                  <small>{{ fieldLabels[field.type] }}<template v-if="field.contactRole"> · {{ roleCaption[field.contactRole] }}</template></small>
+                  <small>{{ fieldLabels[field.type] }}<template v-if="field.contactRole"> · {{ roleCaption[field.contactRole] }}</template><template v-if="field.smsRole"> · {{ smsRoleCaption[field.smsRole] }}</template></small>
                 </button>
                 <div class="field-actions">
                   <UButton type="button" color="neutral" variant="ghost" icon="i-lucide-arrow-up" size="xs" square
@@ -331,6 +389,11 @@ function showHistory() {
                 <USwitch :model-value="selected.contactRole === selectedRole" :label="'用作找回报名的' + roleName[selectedRole]" :disabled="saving" @update:model-value="bindContact" />
                 <p>同时绑定姓名和手机号，并填写这两项，才能使用姓名和手机号找回报名。报名凭证也可找回。</p>
                 <p v-if="boundElsewhere">启用后将从「{{ fieldName(boundElsewhere) }}」解除绑定。</p>
+              </div>
+              <div v-if="selectedRole" class="contact-config">
+                <USwitch :model-value="selected.smsRole === selectedRole" :label="smsRoleLabel[selectedRole]" :disabled="saving" @update:model-value="bindSms" />
+                <p>{{ selectedRole === 'phone' ? '优先使用这里填写的号码，号码须与来宾已验证的手机号一致。留空使用已验证的手机号。' : '已配置姓名通知模板时，会把这里填写的姓名和活动标题发到短信中。' }}</p>
+                <p v-if="smsBoundElsewhere">启用后将从「{{ fieldName(smsBoundElsewhere) }}」解除短信绑定。</p>
               </div>
               <UFormField v-if="isFileField(selected.type)" label="最大上传数量">
                 <USelect :model-value="selected.maxFiles ?? 1" :items="fileLimits" class="w-full" :disabled="saving"
@@ -382,6 +445,9 @@ function showHistory() {
 .builder-heading p span { color: var(--jade); }
 .builder-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .builder-feedback { margin: 10px 16px 0; }
+.builder-notification { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 10px 18px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.builder-notification h3 { margin-bottom: 8px; font-size: 15px; font-weight: 650; }
+.builder-notification > .feedback { flex-basis: 100%; }
 .builder-nav { display: flex; gap: 2px; padding: 5px 9px; border-bottom: 1px solid var(--line); background: #f7f9fe; }
 .builder-nav button { min-width: 0; flex: 1; border-radius: 6px; padding: 7px 4px; color: var(--muted); font-size: 14px; }
 .builder-nav button[aria-pressed=true] { color: var(--forest); font-weight: 650; background: #e9f1ff; }

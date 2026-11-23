@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Conference } from '#shared/models'
+import { materialImagePreviewUrl } from '#shared/materials'
 import MaterialBrowser from './MaterialBrowser.vue'
 import MaterialDialog from './material/ConsoleDialog.vue'
 import ImageSelectTile from './material/ImageSelectTile.vue'
@@ -75,7 +76,7 @@ function show(image: CoverImage) {
     <ol v-else class="cover-strip" :class="{ 'cover-strip-editable': $slots['image-fields'] }" :aria-label="label + '播放顺序'">
       <li v-for="(image, index) in modelValue" :key="image.id" class="cover-thumb">
         <button type="button" class="cover-thumb-image" :aria-label="'查看第 ' + (index + 1) + ' 张' + label" @click="show(image)">
-          <img :src="image.url" alt="" loading="lazy" width="128" height="72" />
+          <img :src="materialImagePreviewUrl(image.url)" alt="" loading="lazy" width="128" height="72" />
         </button>
         <div class="cover-thumb-footer">
           <span>{{ index === 0 && !wide ? '主封面' : '第 ' + (index + 1) + ' 张' }}</span>

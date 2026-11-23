@@ -58,6 +58,7 @@ export function fields(value: unknown) {
   if (!Array.isArray(value) || value.length > 40) fail(400, '自定义字段最多 40 项')
   const ids = new Set<string>()
   const roles = new Set<string>()
+  const smsRoles = new Set<string>()
   return value.map((raw): Field => {
     const input = object(raw)
     const id = text(input.id, 36, '字段编号').toLowerCase()
@@ -79,12 +80,17 @@ export function fields(value: unknown) {
       }
       roles.add(contactRole)
     }
+    const smsRole = input.smsRole == null ? undefined : oneOf(input.smsRole, ['name', 'phone'], '短信字段')
+    if (smsRole) {
+      if (smsRoles.has(smsRole) || type !== (smsRole === 'name' ? 'text' : 'phone')) fail(400, '每种短信字段只能绑定一次，字段类型须匹配')
+      smsRoles.add(smsRole)
+    }
     const supportsFiles = type === 'file' || type === 'image'
     const maxFiles = supportsFiles && input.maxFiles !== undefined ? positive(input.maxFiles) : 1
     if (maxFiles > 10) fail(400, '每个上传字段最多允许 10 份附件')
     return {
       id, type, label, options, required: !isContentField(type) && input.required === true,
-      ...(contactRole ? { contactRole } : {}), ...(supportsFiles ? { maxFiles } : {}),
+      ...(contactRole ? { contactRole } : {}), ...(smsRole ? { smsRole } : {}), ...(supportsFiles ? { maxFiles } : {}),
     }
   })
 }

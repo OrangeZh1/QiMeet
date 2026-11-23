@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AttendeeActivityCard } from '#shared/attendee-account'
 import { displayDate } from '#shared/models'
+import { materialImagePreviewUrl } from '#shared/materials'
 definePageMeta({ layout: false, pageTransition: false })
 useSeoMeta({ title: '活动' })
 const { data: items, error } = await useFetch<AttendeeActivityCard[]>('/api/activities')
@@ -9,7 +10,7 @@ const site = computed(() => settings.value || fallbackSite)
 const featured = computed(() => items.value?.[0])
 const more = computed(() => items.value?.slice(1) || [])
 const brokenFeaturedCover = ref('')
-const featuredCover = computed(() => featured.value?.coverUrl || '')
+const featuredCover = computed(() => materialImagePreviewUrl(featured.value?.coverUrl || '', 'display'))
 const featuredImage = ref<HTMLImageElement>()
 onMounted(() => {
   if (featuredImage.value?.complete && !featuredImage.value.naturalWidth) brokenFeaturedCover.value = featuredCover.value

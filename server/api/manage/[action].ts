@@ -102,6 +102,15 @@ export default defineEventHandler(async (event) => {
     if (action === 'close') return closeEventPart(eventId, oneOf(input.scope, ['registration', 'event'], '截止类型'))
     if (action === 'save-agenda') return saveEventAgenda(eventId, input.agenda)
     if (action === 'save-form') return saveForm(eventId, input)
+    if (action === 'save-registration-sms') {
+      const registrationSms = input.registrationSms
+      if (typeof registrationSms !== 'boolean') fail(400, '请选择是否发送报名成功短信')
+      return transaction(async (db) => {
+        await conferenceById(eventId, db, true)
+        await mutate('UPDATE events SET registration_sms=? WHERE id=?', [registrationSms, eventId], db)
+        return { registrationSms }
+      })
+    }
     if (action === 'save-checkpoint') return { id: await saveCheckpoint(eventId, input) }
     if (action === 'revoke-qr') {
       return transaction(async (db) => {

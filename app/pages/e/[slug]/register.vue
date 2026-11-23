@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { displayDate, type Registration } from '#shared/models'
+import { displayDate, type Registration, type RegistrationSmsStatus } from '#shared/models'
 
 definePageMeta({ layout: false, pageTransition: false, key: route => route.fullPath })
 const route = useRoute()
@@ -28,6 +28,7 @@ const unavailableMessage = computed(() => {
 })
 
 const credential = ref('')
+const smsStatus = ref<RegistrationSmsStatus>()
 const contactRecovery = ref(false)
 const showForm = computed(() => Boolean(data.value?.registrationOpen && data.value.signedIn && !credential.value))
 const keyboardOpen = ref(false)
@@ -48,9 +49,10 @@ onMounted(() => {
 onBeforeUnmount(() => viewport?.removeEventListener('resize', updateKeyboard))
 const copyStatus = ref('')
 const copying = ref(false)
-function saved(result: { registration: Registration, credential?: string }) {
+function saved(result: { registration: Registration, credential?: string, smsStatus?: RegistrationSmsStatus }) {
   if (!result.credential) return
   credential.value = result.credential
+  smsStatus.value = result.smsStatus
   contactRecovery.value = Boolean(result.registration.name && result.registration.phone)
   if (data.value) {
     data.value = {
@@ -99,6 +101,13 @@ async function copy() {
           <p class="attendee-helper">{{ contactRecovery ? '换设备签到可用姓名和手机号。凭证用于找回并管理报名。' : '请保存凭证，换设备时可用它找回报名或签到。' }}</p>
         </div>
         <p v-if="copyStatus" role="status" class="attendee-notice">{{ copyStatus }}</p>
+        <p v-if="smsStatus" role="status" class="attendee-helper">
+          <template v-if="smsStatus === 'submitted'">报名短信已提交发送。</template>
+          <template v-else-if="smsStatus === 'missing-phone'">还没有已验证的手机号。<NuxtLink to="/mine/profile?edit=phone" class="attendee-inline-link">验证手机号</NuxtLink>后可接收后续活动的短信。</template>
+          <template v-else-if="smsStatus === 'form-phone-unverified'">报名表填写的短信收件号码与已验证的手机号不同，短信未发送。</template>
+          <template v-else-if="smsStatus === 'missing-template-values'">短信未发送，通知模板缺少可用的姓名或活动标题。</template>
+          <template v-else>报名短信暂未发送。你可以在「我的报名」查看记录。</template>
+        </p>
         <div class="attendee-actions">
           <UButton v-if="returnToCheckIn" :to="returnToCheckIn" class="attendee-action">继续签到</UButton>
           <UButton v-else :to="path + '/record'" class="attendee-action">查看我的报名</UButton>
@@ -107,6 +116,9 @@ async function copy() {
 
       <section v-else-if="data?.registrationOpen" class="signup-entry" aria-labelledby="attendee-register-heading">
         <h1 id="attendee-register-heading" class="attendee-form-event-title">{{ data.conference.title }}</h1>
+        <p v-if="data.conference.registrationSms" class="attendee-helper signup-sms-hint">
+          用于接收短信的报名手机号须与<a href="/mine/profile?edit=phone" target="_blank" rel="noopener" class="attendee-inline-link">个人资料</a>中已验证的号码一致。
+        </p>
         <AttendeeForm v-if="data.signedIn" :slug="slug" :form="data.form" fixed-submit @saved="saved" />
       </section>
 
@@ -120,6 +132,7 @@ async function copy() {
 </template>
 
 <style scoped>
+.signup-sms-hint { margin-bottom: 14px; }
 .signup-receipt-heading { display: flex; align-items: center; gap: 12px; }
 .signup-receipt-heading .attendee-result-icon { flex: none; width: 44px; height: 44px; font-size: 23px; }
 .signup-receipt-heading .attendee-subheading { margin-top: 2px; }

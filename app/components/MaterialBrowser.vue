@@ -2,7 +2,7 @@
 import ConsoleInput from '#qiandao-console/ConsoleInput.vue'
 import ConsoleListPagination from './console/ConsoleListPagination.vue'
 import { displayDate, type Material } from '#shared/models'
-import { materialKinds, materialPolicy, type MaterialKind } from '#shared/materials'
+import { materialImagePreviewUrl, materialKinds, materialPolicy, type MaterialKind } from '#shared/materials'
 import ConsoleDialog from './material/ConsoleDialog.vue'
 import { uploadLibraryMaterial } from '~/composables/useMaterialUpload'
 import ImageViewer from './material/ImageViewer.vue'
@@ -237,7 +237,7 @@ async function confirmDelete() {
           :aria-pressed="picking ? selected(item.id) : undefined"
           :disabled="picking && selectionIsFull && !selected(item.id)" @click="choose(item)">
           <span class="material-image">
-            <img v-if="item.kind === 'image'" :src="item.url" alt="" width="150" height="150" loading="lazy" decoding="async" />
+            <img v-if="item.kind === 'image'" :src="materialImagePreviewUrl(item.url)" alt="" width="150" height="150" loading="lazy" decoding="async" />
             <UIcon v-else :name="kindIcons[item.kind]" class="material-kind-icon" aria-hidden="true" />
             <span v-if="picking && selected(item.id)" class="material-selected" aria-hidden="true"><UIcon name="i-lucide-check" /></span>
           </span>
@@ -259,7 +259,7 @@ async function confirmDelete() {
           <tr v-if="!result.items.length"><td colspan="5" class="material-table-empty">{{ emptyLabel }}</td></tr>
           <tr v-for="item in result.items" :key="item.id">
             <td><div class="material-table-name">
-              <img v-if="item.kind === 'image'" :src="item.url" alt="" width="36" height="36" loading="lazy" />
+              <img v-if="item.kind === 'image'" :src="materialImagePreviewUrl(item.url)" alt="" width="36" height="36" loading="lazy" />
               <UIcon v-else :name="kindIcons[item.kind]" class="material-kind-icon" aria-hidden="true" />
               <span :title="item.name">{{ item.name }}</span>
             </div></td>

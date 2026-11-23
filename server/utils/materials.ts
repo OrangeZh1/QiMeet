@@ -85,17 +85,37 @@ function videoRange(value: string, length: number) {
 
 export async function materialContent(event: RequestEvent, id: string, publishedOnly: boolean, download = false) {
   if (!uuidPattern.test(id)) fail(404, '找不到该素材')
-  const material = await first<{ name: string, kind: MaterialKind, mime: string, payload: Buffer }>(
-    'SELECT m.name,m.kind,m.mime,m.payload FROM materials m WHERE m.id=?' +
+  const requested = getQuery(event).preview
+  const preview = !download && (requested === 'thumb' || requested === 'display') ? requested : undefined
+  const projection = preview ? 'COALESCE(v.payload,m.payload) AS payload,v.material_id IS NOT NULL AS hasPreview' : 'm.payload,0 AS hasPreview'
+  const material = await first<{ name: string, kind: MaterialKind, mime: string, digest: string, payload: Buffer, hasPreview: number }>(
+    'SELECT m.name,m.kind,m.mime,m.digest,' + projection + ' FROM materials m ' +
+    (preview ? 'LEFT JOIN material_image_previews v ON v.material_id=m.id AND v.variant=? AND m.kind=\'image\' ' : '') + 'WHERE m.id=?' +
     (publishedOnly
       ? " AND ((m.kind='image' AND (EXISTS (SELECT 1 FROM events e WHERE e.cover_material_id=m.id AND e.published=1 AND e.deleted_at IS NULL)" +
         ' OR EXISTS (SELECT 1 FROM event_covers c JOIN events e ON e.id=c.event_id WHERE c.material_id=m.id AND e.published=1 AND e.deleted_at IS NULL)' +
         ' OR EXISTS (SELECT 1 FROM site_home_banners WHERE material_id=m.id)))' +
         " OR (m.kind='video' AND EXISTS (SELECT 1 FROM event_videos v JOIN events e ON e.id=v.event_id WHERE v.material_id=m.id AND e.published=1 AND e.deleted_at IS NULL)))"
       : ''),
-    [id],
+    preview ? [preview, id] : [id],
   )
   if (!material) fail(404, '找不到该素材')
+  if (preview && material.kind === 'image') {
+    const payload = material.hasPreview ? material.payload : await imageMaterialPreview(id, preview, material.payload)
+    if (payload) {
+      const etag = '"' + material.digest + '-' + preview + '-webp-v1"'
+      setResponseHeaders(event, {
+        'content-type': 'image/webp', 'x-content-type-options': 'nosniff', 'cache-control': 'private, no-cache',
+        'content-security-policy': "default-src 'none'; sandbox", etag,
+      })
+      const matches = getHeader(event, 'if-none-match')?.split(',').some(tag => tag.trim() === '*' || tag.trim().replace(/^W\//, '') === etag)
+      if (matches) {
+        setResponseStatus(event, 304)
+        return null
+      }
+      return payload
+    }
+  }
   const attachment = download || material.kind === 'file'
   setResponseHeaders(event, {
     'content-type': material.mime, 'x-content-type-options': 'nosniff', 'cache-control': 'no-store',

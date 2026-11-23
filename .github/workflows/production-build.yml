@@ -21,7 +21,7 @@ jobs:
       - name: 安装依赖并验证
         run: |
           pnpm install --frozen-lockfile
-          node --test test/auth-and-help.mjs
+          node --test test/auth-and-help.mjs test/registration-migration.mjs test/registration-notifications.mjs
       - name: 构建生产制品
         run: |
           pnpm build
@@ -37,10 +37,19 @@ jobs:
       - name: 验证制品可独立启动
         run: |
           smoke="$(mktemp -d "$RUNNER_TEMP/qimeet-smoke.XXXXXX")"
+          pid=''
+          trap 'if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi; rm -r -- "$smoke"' EXIT
           tar -xzf qimeet-linux.tar.gz -C "$smoke"
+          node --input-type=commonjs - "$smoke/.output/server/index.mjs" <<'NODE'
+          const { createRequire } = require('node:module')
+          const sharp = createRequire(process.argv[2])('sharp')
+          sharp({ create: { width: 8, height: 8, channels: 3, background: '#fff' } })
+            .webp().toBuffer().then((image) => {
+              if (image.subarray(8, 12).toString() !== 'WEBP') throw new Error('Invalid bundled WebP encoder')
+            }).catch((error) => { console.error(error); process.exitCode = 1 })
+          NODE
           NITRO_HOST=127.0.0.1 NITRO_PORT=3086 node "$smoke/.output/server/index.mjs" > "$smoke/startup.log" 2>&1 &
           pid=$!
-          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; rm -r -- "$smoke"' EXIT
           for attempt in {1..30}; do
             if curl --silent --fail --output /dev/null http://127.0.0.1:3086/brand/favicon.png; then exit 0; fi
             if ! kill -0 "$pid" 2>/dev/null; then break; fi

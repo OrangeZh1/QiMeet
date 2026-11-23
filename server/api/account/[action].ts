@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
     sameOrigin(event)
     if (action === 'logout') return logoutAttendee(event)
     if (action === 'profile') return saveAttendeeDisplayName(event, await jsonBody(event))
+    if (action === 'contact-code' || action === 'contact') return attendeeContactAction(event, action, await jsonBody(event))
     if (action === 'avatar') return uploadAttendeeAvatar(event)
     if (action === 'change-password') return saveAttendeePassword(event, await jsonBody(event))
     if (action === 'wechat') {

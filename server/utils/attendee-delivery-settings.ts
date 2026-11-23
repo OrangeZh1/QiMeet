@@ -1,6 +1,6 @@
 import { isIP } from 'node:net'
 import type { PoolConnection } from 'mysql2/promise'
-import { deliveryCredentialFields, deliveryFields, deliverySecretLabels, smsProviders, type DeliveryChannel, type DeliveryConfig, type DeliveryKind, type DeliverySettingsView, type SmsProvider } from '#shared/delivery-settings'
+import { deliveryCredentialFields, deliveryFields, deliverySecretLabels, registrationTemplateModes, smsProviders, type DeliveryChannel, type DeliveryConfig, type DeliveryKind, type DeliverySettingsView, type SmsProvider } from '#shared/delivery-settings'
 
 type DeliveryRow = { provider: SmsProvider | null } & Record<DeliveryChannel, Buffer | null>
 const columns = { aliyun: 'aliyun_sms_config', tencent: 'tencent_sms_config', smtp: 'smtp_config' } as const
@@ -81,6 +81,15 @@ function validatedConfig(row: DeliveryRow, channel: DeliveryChannel, input: Reco
     }
     if (!/^\d{1,5}$/.test(values.port!) || Number(values.port) < 1 || Number(values.port) > 65535) fail(400, '请输入有效的 SMTP 端口')
     if (values.from !== (current as DeliveryConfig<'smtp'>).from) contactIdentifier('email', values.from)
+  } else {
+    const previous = current as DeliveryConfig<'aliyun'> | DeliveryConfig<'tencent'>
+    const template = input.registrationTemplate === undefined
+      ? previous.registrationTemplate || '' : text(input.registrationTemplate, 100, '报名通知短信模板', false)
+    if (template && !/^[a-zA-Z0-9_-]+$/.test(template)) fail(400, '报名通知短信模板编号有误')
+    if (template && template === values[channel === 'aliyun' ? 'templateCode' : 'templateId']) fail(400, '报名通知请使用独立于验证码的模板')
+    values.registrationTemplate = template
+    values.registrationTemplateMode = input.registrationTemplateMode === undefined
+      ? previous.registrationTemplateMode || 'plain' : oneOf(input.registrationTemplateMode, registrationTemplateModes, '报名短信模板类型')
   }
   const credentialChanged = deliveryCredentialFields[channel].some(key => values[key] !== (current as Record<string, string>)[key])
   const secret = input.secret === undefined || input.secret === '' ? (credentialChanged ? '' : current.secret) : input.secret

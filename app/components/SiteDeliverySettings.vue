@@ -12,6 +12,7 @@ const options: { label: string, value: SmsProvider }[] = [
   { label: '阿里云短信', value: 'aliyun' },
   { label: '腾讯云短信', value: 'tencent' },
 ]
+const templateModes = [{ label: '姓名与活动标题', value: 'name-activity' }, { label: '无变量', value: 'plain' }]
 
 const { data, error } = await useFetch<DeliverySettingsView>('/api/manage/' + action, { cache: 'no-store' })
 if (!data.value) throw createError({ statusCode: attendeeErrorStatus(error.value) || 503, message: errorText(error.value, '暂时无法读取' + title) })
@@ -30,8 +31,10 @@ const failure = ref('')
 function reset(view: DeliverySettingsView) {
   saved.value = view
   provider.value = view.provider || 'disabled'
-  drafts.aliyun = { ...view.configs.aliyun?.values, secret: '' }
-  drafts.tencent = { ...view.configs.tencent?.values, secret: '' }
+  for (const key of ['aliyun', 'tencent'] as const) {
+    const values = view.configs[key]?.values
+    drafts[key] = { ...values, registrationTemplateMode: values?.registrationTemplateMode ?? (values?.registrationTemplate ? 'plain' : 'name-activity'), secret: '' }
+  }
   drafts.smtp = { ...view.configs.smtp?.values, secret: '' }
 }
 reset(saved.value)
@@ -79,6 +82,15 @@ async function save() {
             <p v-if="key === 'templateCode' || key === 'templateId'" class="mt-2 text-xs text-muted">
               {{ key === 'templateCode' ? '填写已审核的模板，验证码变量为 ${code}。' : '填写已审核的模板，验证码占用第 1 个变量 {1}。' }}
             </p>
+          </ConsoleSettingsField>
+          <ConsoleSettingsField v-if="channel !== 'smtp'" :key="channel + '-registration-template'" label="报名成功短信模板" input-id="delivery-registration-template">
+            <ConsoleInput id="delivery-registration-template" v-model="drafts[channel].registrationTemplate" variant="none"
+              maxlength="100" autocomplete="off" :placeholder="channel === 'aliyun' ? '短信模板 CODE' : '短信模板 ID'" :readonly="saving" />
+            <p class="mt-2 text-xs text-muted">填写一个已审核的报名通知模板编号。</p>
+          </ConsoleSettingsField>
+          <ConsoleSettingsField v-if="channel !== 'smtp'" :key="channel + '-registration-template-mode'" label="报名短信模板类型" input-id="delivery-registration-template-mode">
+            <AdminSelect id="delivery-registration-template-mode" v-model="drafts[channel].registrationTemplateMode" :items="templateModes" :disabled="saving" size="md" />
+            <p v-if="drafts[channel].registrationTemplateMode === 'name-activity'" class="mt-2 text-xs text-muted">{{ channel === 'aliyun' ? '模板需包含 ${name} 和 ${activity}。' : '模板需包含 {1}（姓名）和 {2}（活动标题）。' }} 活动标题最多 35 字。</p>
           </ConsoleSettingsField>
           <ConsoleSettingsField :key="channel" :label="deliverySecretLabels[channel]" input-id="delivery-secret" :required="!canKeepSecret(channel)">
             <ConsoleInput id="delivery-secret" v-model="drafts[channel].secret" variant="none" type="password"

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { isFileField, type Answer, type Attachment, type Field, type FormVersion, type Registration } from '#shared/models'
+import { isFileField, type Answer, type Attachment, type Field, type FormVersion, type Registration, type RegistrationSmsStatus } from '#shared/models'
 
 const props = defineProps<{ slug: string, form: FormVersion, registration?: Registration, fixedSubmit?: boolean }>()
-const emit = defineEmits<{ saved: [result: { registration: Registration, credential?: string }], cancel: [] }>()
+const emit = defineEmits<{ saved: [result: { registration: Registration, credential?: string, smsStatus?: RegistrationSmsStatus }], cancel: [] }>()
 const editing = Boolean(props.registration)
 const name = ref(props.registration?.name || '')
 const phone = ref(props.registration?.phone || '')
@@ -106,7 +106,7 @@ async function submit() {
       const registration = await $fetch<Registration>(attendeeApi(props.slug, 'edit'), { method: 'POST', body: data })
       emit('saved', { registration })
     } else {
-      const result = await $fetch<{ registration: Registration, credential: string }>(
+      const result = await $fetch<{ registration: Registration, credential: string, smsStatus?: RegistrationSmsStatus }>(
         attendeeApi(props.slug, 'register'), { method: 'POST', body: data },
       )
       emit('saved', result)

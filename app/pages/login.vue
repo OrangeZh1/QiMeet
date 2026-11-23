@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { attendeeReturn, attendeePasswordMin, attendeePasswordMax, type AccountIntent, type AttendeeAuth, type ContactKind } from '#shared/attendee-account'
+import { attendeeLoginFallback, attendeeReturn, isPublicAttendeeHistory, attendeePasswordMin, attendeePasswordMax, type AccountIntent, type AttendeeAuth, type ContactKind } from '#shared/attendee-account'
 
 definePageMeta({ layout: false, pageTransition: false })
 const route = useRoute()
+const router = useRouter()
 const next = computed(() => attendeeReturn(route.query.next))
+const backTo = computed(() => attendeeLoginFallback(route.query.next))
+
+function returnFromLogin(event: MouseEvent) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return
+  if (!isPublicAttendeeHistory(router.options.history.state.back)) return
+  event.preventDefault()
+  router.back()
+}
 const wechatPreview = computed(() => import.meta.dev && route.query.mode === 'wechat' && route.query.preview === '1')
 const { data: session } = await useFetch<AttendeeAuth>('/api/account/session', { key: 'attendee-login-session', cache: 'no-store' })
 if (session.value?.account && !wechatPreview.value && route.query.wechat !== 'failed') await navigateTo(next.value, { replace: true })
@@ -144,7 +153,7 @@ onBeforeUnmount(() => clearInterval(timer))
     <section class="client-auth">
       <div class="client-auth-hero">
         <img class="client-auth-cover" :src="site?.loginImageUrl || fallbackSite.loginImageUrl" alt="" />
-        <NuxtLink :to="next" class="page-back-icon client-auth-back" aria-label="返回"><UIcon name="i-lucide-chevron-left" aria-hidden="true" /></NuxtLink>
+        <NuxtLink :to="backTo" replace class="page-back-icon client-auth-back" aria-label="返回" @click.capture="returnFromLogin"><UIcon name="i-lucide-chevron-left" aria-hidden="true" /></NuxtLink>
         <div class="client-auth-brand">
           <img :src="site?.logoUrl || fallbackSite.logoUrl" width="35" height="35" alt="" />
           <div>

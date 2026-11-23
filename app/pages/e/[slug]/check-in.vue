@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { displayDate, type CheckInIssue, type Checkpoint, type Registration } from '#shared/models'
+import { materialImagePreviewUrl } from '#shared/materials'
 
 definePageMeta({ layout: false, pageTransition: false, key: route => route.fullPath })
 const route = useRoute()
@@ -81,7 +82,7 @@ async function checkIn() {
   <NuxtLayout name="attendee" :toolbar-title="pageTitle" :back-to-event="Boolean(event)">
     <article class="checkin-screen">
       <header v-if="event" class="attendee-event-summary checkin-event">
-        <img v-if="event.conference.coverUrl" :src="event.conference.coverUrl" class="attendee-event-summary-cover" alt="" width="64" height="48" />
+        <img v-if="event.conference.coverUrl" :src="materialImagePreviewUrl(event.conference.coverUrl)" class="attendee-event-summary-cover" alt="" width="64" height="48" />
         <div>
           <component :is="unavailable ? 'p' : 'h1'" class="checkin-event-title">{{ event.conference.title }}</component>
           <p v-if="point" class="checkin-event-point">{{ point.title }}</p>

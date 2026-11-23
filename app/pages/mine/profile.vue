@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { attendeePasswordMin, attendeePasswordMax, type AttendeeAuth, type AttendeeProfile } from '#shared/attendee-account'
+import { attendeePasswordMin, attendeePasswordMax, type AttendeeAuth, type AttendeeContacts, type AttendeeProfile } from '#shared/attendee-account'
 import { materialPolicy } from '#shared/materials'
 import { brand } from '#shared/brand'
 
@@ -17,17 +17,40 @@ const profile = computed(() => session.value?.account)
 const mode = computed(() => {
   if (route.query.edit === 'name') return 'name'
   if (route.query.edit === 'password' && profile.value?.kind !== 'wechat') return 'password'
+  if (route.query.edit === 'phone' || route.query.edit === 'email') return route.query.edit
 })
+const contactKind = computed(() => mode.value === 'phone' || mode.value === 'email' ? mode.value : undefined)
+const currentContact = computed(() => {
+  if (contactKind.value === 'phone') return profile.value?.contactPhone
+  if (contactKind.value === 'email') return profile.value?.contactEmail
+})
+const verifyCurrentPhone = computed(() => contactKind.value === 'phone' && !!currentContact.value && !profile.value?.contactPhoneVerified)
 const title = computed(() => mode.value === 'name' ? '修改用户名'
+  : contactKind.value ? (verifyCurrentPhone.value ? '验证' : currentContact.value ? '更换' : '绑定') + (contactKind.value === 'phone' ? '手机号' : '邮箱')
   : mode.value === 'password' ? (profile.value?.hasPassword ? '修改密码' : '设置密码') : '个人资料')
 useSeoMeta({ title })
+// Set the canvas and layout colors in the initial response, before page styles load.
+useHead({
+  htmlAttrs: { class: 'qm-account-profile-page' },
+  style: [{ key: 'account-profile-background', textContent: `
+    html.qm-account-profile-page {
+      --qm-profile-background: #f3f6fa;
+      background-color: var(--qm-profile-background);
+    }
+    html.qm-account-profile-page .qm-account-profile,
+    html.qm-account-profile-page .qm-account-profile :is(.attendee-top, .attendee-main, .attendee-footer) {
+      background-color: var(--qm-profile-background);
+    }
+  ` }],
+})
 const back = computed(() => mode.value ? { to: '/mine/profile', label: '个人资料' } : { to: '/mine', label: '我的' })
-const contactLabel = computed(() => profile.value?.kind === 'phone' ? '手机号' : profile.value?.kind === 'email' ? '邮箱' : '登录方式')
-const contactValue = computed(() => {
+const maskPhone = (value: string) => value.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2')
+const loginContact = computed(() => {
   const account = profile.value
   if (!account) return ''
-  if (account.kind === 'phone') return account.label.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2')
-  return account.kind === 'wechat' ? '微信登录' : account.label
+  if (account.kind === 'phone') return account.contactPhone === account.label ? '' : maskPhone(account.label)
+  if (account.kind === 'email') return account.contactEmail === account.label ? '' : account.label
+  return '微信登录'
 })
 const displayName = ref(profile.value?.displayName ?? '')
 const avatarInput = ref<HTMLInputElement>()
@@ -51,6 +74,12 @@ watch(mode, page => {
 
 function updateProfile(patch: Partial<AttendeeProfile>) {
   if (session.value?.account) session.value = { ...session.value, account: { ...session.value.account, ...patch } }
+}
+
+async function saveContact(contacts: Partial<AttendeeContacts>) {
+  updateProfile(contacts)
+  toast.add({ title: '联系方式已保存', color: 'success' })
+  await navigateTo('/mine/profile', { replace: true })
 }
 
 async function saveName() {
@@ -136,7 +165,7 @@ async function logout() {
 
 <template>
   <NuxtLayout name="attendee" class="qm-account-profile" :toolbar-title="title" :back="back">
-    <section class="client-section account-profile">
+    <section class="client-section account-profile" :class="{ 'account-contact-settings': contactKind }">
       <h1 class="sr-only">{{ title }}</h1>
       <p v-if="error" class="attendee-error" role="alert">{{ errorText(error, '暂时无法读取个人资料') }}</p>
       <template v-else-if="profile">
@@ -163,10 +192,28 @@ async function logout() {
             </NuxtLink>
           </div>
           <p v-if="avatarError" class="attendee-error" role="alert">{{ avatarError }}</p>
+          <h2 class="account-group-label">联系方式</h2>
+          <div class="account-group">
+            <NuxtLink to="/mine/profile?edit=phone" class="account-row">
+              <span>手机号</span>
+              <span class="account-row-end">
+                <span>{{ profile.contactPhone ? maskPhone(profile.contactPhone) : '去绑定' }}</span>
+                <small v-if="profile.contactPhone && !profile.contactPhoneVerified" class="account-contact-status">待验证</small>
+                <UIcon name="i-lucide-chevron-right" aria-hidden="true" />
+              </span>
+            </NuxtLink>
+            <NuxtLink to="/mine/profile?edit=email" class="account-row">
+              <span>邮箱</span>
+              <span class="account-row-end">
+                <span>{{ profile.contactEmail || '去绑定' }}</span>
+                <UIcon name="i-lucide-chevron-right" aria-hidden="true" />
+              </span>
+            </NuxtLink>
+          </div>
           <h2 class="account-group-label">账号安全</h2>
           <div class="account-group">
-            <div class="account-row">
-              <span>{{ contactLabel }}</span><span class="account-row-end">{{ contactValue }}</span>
+            <div v-if="loginContact" class="account-row">
+              <span>登录账号</span><span class="account-row-end">{{ loginContact }}</span>
             </div>
             <NuxtLink v-if="profile.kind !== 'wechat'" :to="{ path: '/mine/profile', query: { edit: 'password' } }" class="account-row">
               <span>{{ profile.hasPassword ? '修改密码' : '设置密码' }}</span>
@@ -187,6 +234,11 @@ async function logout() {
           <UButton type="submit" class="profile-action" :disabled="!displayName || displayName === profile.displayName"
             :loading="nameBusy">保存用户名</UButton>
         </form>
+        <AttendeeContactForm v-else-if="contactKind" :key="contactKind" :kind="contactKind"
+          :current-contact="contactKind === 'phone' && currentContact ? maskPhone(currentContact) : currentContact"
+          :verify-current="verifyCurrentPhone"
+          :initial-identifier="verifyCurrentPhone ? currentContact || undefined : mode === 'email' && profile.kind === 'email' && !profile.contactEmail ? profile.label : undefined"
+          @saved="saveContact" />
         <form v-else class="profile-card attendee-input-form" @submit.prevent="savePassword">
           <div v-if="profile.hasPassword" class="attendee-field">
             <label for="profile-current-password">当前密码</label>
@@ -224,7 +276,7 @@ async function logout() {
 
 <style scoped>
 .account-profile { max-width: 34rem; margin-inline: auto; gap: 10px; }
-:global(.qm-account-profile .attendee-main) { background: #f3f6fa; }
+.account-contact-settings { max-width: 30rem; padding-block: clamp(22px, 4vw, 48px); }
 .account-group { padding: 0 15px; border: 1px solid #e1e8f2; border-radius: 10px; background: #fff; }
 .account-group-label { padding: 4px 2px 0; color: var(--muted); font-size: 13px; font-weight: 570; }
 .account-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 52px; padding-block: 9px; text-align: left; }
@@ -233,6 +285,7 @@ async function logout() {
 .account-avatar-row { min-height: 70px; }
 .account-row-end { display: flex; min-width: 0; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; text-align: right; overflow-wrap: anywhere; }
 .account-row-end > [aria-hidden] { flex: none; font-size: 17px; color: #74849e; }
+.account-contact-status { flex: none; color: #795119; font-size: 12px; }
 .account-avatar { display: grid; place-items: center; flex: none; width: 48px; height: 48px; overflow: hidden; border-radius: 50%; background: #eaf1ff; color: #315daa; font-size: 22px; }
 .account-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .account-logout { min-height: 46px; margin-top: 7px; border: 1px solid #e1e8f2; border-radius: 9px; background: #fff; color: #9b3440; font-size: 15px; font-weight: 630; }

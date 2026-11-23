@@ -4,6 +4,7 @@ import ConsoleDialog from '~/components/material/ConsoleDialog.vue'
 import type { EventListItem } from '#shared/models'
 import type { TrashedEvent } from '#shared/event-trash'
 import { displayDate } from '#shared/models'
+import { materialImagePreviewUrl } from '#shared/materials'
 import { activityStage, activityStages, type ActivityStage } from '#shared/activity-status'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
@@ -170,7 +171,7 @@ async function purge() {
             <tr v-for="event in activityRows" :key="event.id">
               <td>
                 <div class="event-cell">
-                  <span class="event-thumb"><img v-if="event.coverUrl" :src="event.coverUrl" alt="" loading="lazy" /><UIcon v-else name="i-lucide-calendar-range" /></span>
+                  <span class="event-thumb"><img v-if="event.coverUrl" :src="materialImagePreviewUrl(event.coverUrl)" alt="" loading="lazy" /><UIcon v-else name="i-lucide-calendar-range" /></span>
                   <div><NuxtLink :to="'/admin/events/' + event.id">{{ event.title }}</NuxtLink><small>{{ event.venue || event.organizer || '会场待定' }}</small></div>
                 </div>
               </td>

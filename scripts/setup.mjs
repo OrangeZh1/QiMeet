@@ -13,6 +13,27 @@ const db = await mysql.createConnection({
   database: decodeURIComponent(url.pathname.slice(1)),
   timezone: 'Z', multipleStatements: task === 'migrate',
 })
+
+async function applyRegistrationContactsMigration() {
+  // Keep the original migration checksum and resume after any committed ALTER.
+  const changes = [
+    ['events', 'registration_sms', 'BOOLEAN NOT NULL DEFAULT FALSE', 'tinyint(1)', 'NO', '0', null],
+    ['attendee_accounts', 'verified_phone', 'VARCHAR(11) CHARACTER SET ascii COLLATE ascii_bin NULL', 'varchar(11)', 'YES', null, 'ascii_bin'],
+    ['attendee_accounts', 'verified_email', 'VARCHAR(254) CHARACTER SET ascii COLLATE ascii_bin NULL', 'varchar(254)', 'YES', null, 'ascii_bin'],
+  ]
+  for (const [table, column, definition, type, nullable, defaultValue, collation] of changes) {
+    const [[existing]] = await db.execute(
+      'SELECT COLUMN_TYPE AS type,IS_NULLABLE AS nullable,COLUMN_DEFAULT AS defaultValue,COLLATION_NAME AS collation ' +
+      'FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [table, column],
+    )
+    if (!existing) {
+      await db.query('ALTER TABLE ' + table + ' ADD COLUMN ' + column + ' ' + definition)
+    } else if (existing.type !== type || existing.nullable !== nullable || existing.defaultValue !== defaultValue || existing.collation !== collation) {
+      throw new Error('已存在的字段与 032 迁移定义不符：' + table + '.' + column)
+    }
+  }
+}
+
 try {
   if (task === 'migrate') {
     const [[{ acquired }]] = await db.execute("SELECT GET_LOCK(CONCAT('qimeet:', DATABASE()), 15) AS acquired")
@@ -27,7 +48,8 @@ try {
         if (existing.digest !== digest) throw new Error('已执行的迁移发生变化 ' + name)
         continue
       }
-      await db.query(sql)
+      if (name === '032_registration_sms_and_verified_contacts.sql') await applyRegistrationContactsMigration()
+      else await db.query(sql)
       await db.execute('INSERT INTO schema_migrations VALUES (?,?)', [name, digest])
       console.log('已应用', name)
     }

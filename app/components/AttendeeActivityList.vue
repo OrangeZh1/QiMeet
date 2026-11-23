@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AccountRegistration, AttendeeActivityCard } from '#shared/attendee-account'
 import { displayDate } from '#shared/models'
+import { materialImagePreviewUrl } from '#shared/materials'
 defineProps<{ items: (AttendeeActivityCard | AccountRegistration)[] }>()
 </script>
 
@@ -8,7 +9,7 @@ defineProps<{ items: (AttendeeActivityCard | AccountRegistration)[] }>()
   <ul class="client-activities">
     <li v-for="event in items" :key="event.slug">
       <NuxtLink :to="attendeePath(event.slug) + ('registrationId' in event ? '/record' : '')" class="client-activity">
-        <img v-if="event.coverUrl" class="client-activity-cover" :src="event.coverUrl" alt="" width="64" height="52" loading="lazy" />
+        <img v-if="event.coverUrl" class="client-activity-cover" :src="materialImagePreviewUrl(event.coverUrl)" alt="" width="64" height="52" loading="lazy" />
         <div class="client-activity-copy">
           <strong>{{ event.title }}</strong>
           <div class="client-activity-meta">

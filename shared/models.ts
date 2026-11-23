@@ -14,6 +14,7 @@ export type Field = {
   required: boolean
   options: string[]
   contactRole?: 'name' | 'phone'
+  smsRole?: 'name' | 'phone'
   maxFiles?: number
 }
 export const legacyContactFields: Field[] = [
@@ -49,6 +50,7 @@ export type Conference = {
   registrationEndsAt: string
   published: boolean
   editPolicy: EditMode
+  registrationSms: boolean
   editDeadline: EditDeadline
 }
 export type FormVersion = { id: number, version: number, fields: Field[], identityPurpose: string, legacyContact: boolean }
@@ -74,6 +76,7 @@ export type Registration = {
   attendance: Attendance[]
 }
 export type EventDetails = { conference: Conference, form: FormVersion, registrationOpen: boolean, checkpoints: Checkpoint[], recognized: boolean, signedIn: boolean }
+export type RegistrationSmsStatus = 'submitted' | 'missing-phone' | 'form-phone-unverified' | 'missing-template-values' | 'failed'
 export type EventListItem = Conference & { registered: number, attended: number }
 export type RegistrantRow = Pick<Registration, 'id' | 'name' | 'phone' | 'createdAt' | 'edits'> & { version: number, attendance: Attendance[] }
 export type AdminEvent = { conference: Conference, forms: FormVersion[], checkpoints: (Checkpoint & { attended: number })[], registered: number, attended: number }

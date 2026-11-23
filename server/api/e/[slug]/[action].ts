@@ -1,4 +1,4 @@
-import type { Conference, EventDetails } from '#shared/models'
+import type { Conference, EventDetails, Field } from '#shared/models'
 import type { StoredRegistration } from '#server/utils/registrations'
 import type { RequestEvent } from '#server/utils/security'
 
@@ -84,17 +84,23 @@ async function register(event: RequestEvent, slug: string) {
   const formId = positive(submission.payload.formId)
   if (currentForm.id !== formId) fail(409, '报名表已有更新，请重新打开报名页')
   const prepared = await prepareAttendeeSubmission(currentForm, submission, submission.payload.identityConsent === true)
-  const contactAnswer = (role: 'name' | 'phone') => {
-    const field = currentForm.fields.find(field => field.contactRole === role)
+  const fieldAnswer = (field: Field | undefined) => {
     const value = field ? prepared.answers[field.id] : undefined
     return typeof value === 'string' ? value : null
   }
+  const contactAnswer = (role: 'name' | 'phone') => fieldAnswer(currentForm.fields.find(field => field.contactRole === role))
   const name = currentForm.legacyContact ? text(submission.payload.name, 80, '姓名') : contactAnswer('name')
   const contact = currentForm.legacyContact ? phone(submission.payload.phone) : contactAnswer('phone')
+  const phoneFields = currentForm.fields.filter(field => field.type === 'phone')
+  const smsPhoneField = phoneFields.find(field => field.smsRole === 'phone') ?? phoneFields.find(field => field.contactRole === 'phone')
+  const smsPhone = smsPhoneField ? fieldAnswer(smsPhoneField)
+    : currentForm.legacyContact ? contact : phoneFields.length === 1 ? fieldAnswer(phoneFields[0]) : null
+  const smsNameField = currentForm.fields.find(field => field.smsRole === 'name')
+  const smsName = smsNameField ? fieldAnswer(smsNameField) : name
   const removals = validateAttendeeAttachments(prepared, [])
   const credential = newCredential()
 
-  const { writeCookie, registration } = await transaction(async (db) => {
+  const { writeCookie, registration, registrationSms, activityTitle } = await transaction(async (db) => {
     // Share the event lock used by administrator edits so publication, schedule, and form version stay consistent.
     const locked = await publishedConference(slug, db, true)
     assertRegistrationOpen(locked)
@@ -116,12 +122,13 @@ async function register(event: RequestEvent, slug: string) {
     await saveAttendeeAttachments(db, registrationId, prepared, removals)
     const registration = await recordView(locked, await registrationFor(locked.id, registrationId, db), 'full', db)
     const writeCookie = await prepareQiSession(event, 'attendee', registrationId, db, locked.id, account.id)
-    return { writeCookie, registration }
+    return { writeCookie, registration, registrationSms: locked.registrationSms, activityTitle: locked.title }
   })
 
   writeCookie()
+  const smsStatus = registrationSms ? await sendRegistrationSms(account.id, { phone: smsPhone, name: smsName, activity: activityTitle }) : undefined
   setResponseStatus(event, 201)
-  return { credential, registration }
+  return { credential, registration, smsStatus }
 }
 
 async function edit(event: RequestEvent, slug: string) {

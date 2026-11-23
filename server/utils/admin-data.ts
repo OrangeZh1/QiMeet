@@ -45,15 +45,17 @@ export async function saveConference(id: number | undefined, input: Record<strin
   const registrationRange = interval(input.registrationStartsAt, input.registrationEndsAt, '报名')
   const editPolicy = oneOf(input.editPolicy, ['off', 'once', 'unlimited'], '二次修改规则')
   const editDeadline = oneOf(input.editDeadline, ['registration', 'manual'], '修改截止规则')
+  const registrationSms = input.registrationSms
+  if (registrationSms !== undefined && typeof registrationSms !== 'boolean') fail(400, '请选择是否发送报名成功短信')
   const details = [title, organizer, venue, description]
   const timing = [...eventRange, ...registrationRange, editPolicy, editDeadline]
   return await transaction(async (db) => {
     for (const cover of covers || []) await assertMaterial(cover, db)
     if (id) {
-      await conferenceById(id, db, true)
+      const current = await conferenceById(id, db, true)
       const coverColumns = covers === undefined ? '' : ",cover_material_id=?,cover_url=''"
-      await mutate('UPDATE events SET title=?,organizer=?,venue=?,description=?,starts_at=?,ends_at=?,registration_starts_at=?,registration_ends_at=?,edit_policy=?,edit_deadline=?' + coverColumns + ' WHERE id=?',
-        [...details, ...timing, ...(covers === undefined ? [] : [covers[0] ?? null]), id], db)
+      await mutate('UPDATE events SET title=?,organizer=?,venue=?,description=?,starts_at=?,ends_at=?,registration_starts_at=?,registration_ends_at=?,edit_policy=?,edit_deadline=?,registration_sms=?' + coverColumns + ' WHERE id=?',
+        [...details, ...timing, registrationSms ?? current.registrationSms, ...(covers === undefined ? [] : [covers[0] ?? null]), id], db)
       if (covers !== undefined) await replaceCovers(db, id, covers)
       await replaceActivityVideos(db, id, videos)
       return id
@@ -64,8 +66,8 @@ export async function saveConference(id: number | undefined, input: Record<strin
     let result
     try {
       result = await mutate(
-        'INSERT INTO events (slug,title,organizer,venue,description,starts_at,ends_at,registration_starts_at,registration_ends_at,edit_policy,edit_deadline,cover_material_id,published) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [slug, ...details, ...timing, covers?.[0] ?? null, input.published === true], db,
+        'INSERT INTO events (slug,title,organizer,venue,description,starts_at,ends_at,registration_starts_at,registration_ends_at,edit_policy,edit_deadline,cover_material_id,published,registration_sms) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [slug, ...details, ...timing, covers?.[0] ?? null, input.published === true, registrationSms ?? false], db,
       )
     } catch (error) {
       if (isDuplicate(error)) fail(409, '活动链接已被占用')
