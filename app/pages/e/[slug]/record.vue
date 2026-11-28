@@ -73,11 +73,6 @@ const attachmentLink = (id: string) => attendeeApi(slug, 'attachment') + '?id=' 
           </div>
           <p v-if="status" class="attendee-notice" role="status">{{ status }}</p>
           <p v-if="!record && error" role="alert" class="attendee-error">{{ errorText(error, '暂时无法读取报名记录，可尝试找回。') }}</p>
-          <dl v-if="record && !recovering" class="attendee-answers">
-            <div v-if="record.name && (record.form.legacyContact || !record.fullAccess)" class="attendee-answer-row"><dt>姓名</dt><dd>{{ record.name }}</dd></div>
-            <div v-if="record.phone && (record.form.legacyContact || !record.fullAccess)" class="attendee-answer-row"><dt>报名手机号</dt><dd>{{ record.phone }}</dd></div>
-            <div class="attendee-answer-row"><dt>提交时间</dt><dd><time :datetime="record.createdAt">{{ displayDate(record.createdAt) }}</time></dd></div>
-          </dl>
         </header>
 
         <div v-if="recovering" class="record-stack">
@@ -90,6 +85,18 @@ const attachmentLink = (id: string) => attendeeApi(slug, 'attachment') + '?id=' 
         </section>
 
         <template v-else>
+          <section class="record-block attendee-stack" aria-labelledby="record-receipt-title">
+            <div class="split-row">
+              <h2 id="record-receipt-title" class="attendee-card-title">报名回执</h2>
+              <span class="attendee-label done">报名成功</span>
+            </div>
+            <dl class="attendee-answers">
+              <div class="attendee-answer-row"><dt>报名编号</dt><dd>#{{ record.id }}</dd></div>
+              <div class="attendee-answer-row"><dt>提交时间</dt><dd><time :datetime="record.createdAt">{{ displayDate(record.createdAt) }}</time></dd></div>
+              <div v-if="record.name && (record.form.legacyContact || !record.fullAccess)" class="attendee-answer-row"><dt>姓名</dt><dd>{{ record.name }}</dd></div>
+              <div v-if="record.phone && (record.form.legacyContact || !record.fullAccess)" class="attendee-answer-row"><dt>报名手机号</dt><dd>{{ record.phone }}</dd></div>
+            </dl>
+          </section>
           <section v-if="record.attendance.length" class="record-block attendee-stack">
             <h2 class="attendee-card-title">现场签到</h2>
             <ul class="attendee-attendance">

@@ -426,9 +426,12 @@ async function saveNotification() {
     <ConsoleDialog v-model:open="historyOpen" title="历史版本">
       <template #body>
         <div class="property-fields">
-          <UFormField label="报名表版本">
-            <USelect v-model="historicId" :items="historyItems" class="w-full" />
-          </UFormField>
+          <label class="grid gap-1 text-sm">
+            报名表版本
+            <select v-model="historicId" class="w-full rounded-md border border-default bg-default px-3 py-2 focus-visible:outline-primary">
+              <option v-for="item in historyItems" :key="item.value" :value="item.value">{{ item.label }}</option>
+            </select>
+          </label>
           <RegistrationFormPreview v-if="historic" :title="activityTitle" :fields="versionFields(historic)" :identity-purpose="historic.identityPurpose" />
         </div>
       </template>
