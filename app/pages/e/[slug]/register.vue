@@ -99,7 +99,7 @@ async function copy() {
           <h2>报名凭证</h2>
           <code class="attendee-credential">{{ credential }}</code>
           <UButton type="button" class="signup-copy" variant="ghost" icon="i-lucide-copy" :loading="copying" @click="copy">复制</UButton>
-          <p class="attendee-helper">专属凭证仅在此显示一次，请复制保存。{{ contactRecovery ? '换设备签到也可用姓名和手机号。' : '换设备时可用凭证找回报名或签到。' }}</p>
+          <p class="attendee-helper"><strong>专属凭证仅显示一次，建议立即截屏保存。</strong>{{ contactRecovery ? '换设备签到也可用姓名和手机号。' : '换设备时可用凭证找回报名或签到。' }}</p>
         </div>
         <p v-if="copyStatus" role="status" class="attendee-notice">{{ copyStatus }}</p>
         <p v-if="smsStatus" role="status" class="attendee-helper">
