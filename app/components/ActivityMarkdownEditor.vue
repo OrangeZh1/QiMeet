@@ -4,12 +4,12 @@ import RichMarkdown from './RichMarkdown.vue'
 import ConsoleDialog from './material/ConsoleDialog.vue'
 
 const props = withDefaults(defineProps<{
-  disabled?: boolean, maxlength?: number, label?: string, placeholder?: string, allowMaterialVideo?: boolean
+  disabled?: boolean, maxlength?: number, label?: string, placeholder?: string, allowMaterialMedia?: boolean
 }>(), {
   maxlength: 12000,
   label: '活动介绍',
   placeholder: '输入活动详情，例如活动亮点、参加方式或注意事项。',
-  allowMaterialVideo: true,
+  allowMaterialMedia: true,
 })
 const model = defineModel<string>({ default: '' })
 const emit = defineEmits<{ busy: [value: boolean] }>()
@@ -17,12 +17,14 @@ const editorId = useId()
 const editor = ref<HTMLTextAreaElement>()
 const previewing = ref(false)
 const limitError = ref(false)
-const videoOpen = ref(false)
-const videoMounted = ref(false)
-const videoBusy = ref(false)
-const videoId = ref<string | null>(null)
-const videoRange = ref<{ start: number, end: number }>()
-let focusAfterVideo: readonly [number, number] | undefined
+const kind = ref<'image' | 'video'>('image')
+const kindLabel = computed(() => kind.value === 'image' ? '图片' : '视频')
+const pickerOpen = ref(false)
+const pickerMounted = ref(false)
+const pickerBusy = ref(false)
+const materialId = ref<string | null>(null)
+const selectionRange = ref<{ start: number, end: number }>()
+let focusAfterPick: readonly [number, number] | undefined
 watch(model, () => { limitError.value = false })
 
 type Insertion = { content: string, from: number, to: number }
@@ -48,7 +50,6 @@ const commands = [
   { label: '有序列表', icon: 'i-lucide-list-ordered', block: true, edit: (text: string) => list(text, index => (index + 1) + '. ') },
   { label: '引用', icon: 'i-lucide-quote', block: true, edit: (text: string) => list(text || '引用内容', () => '> ') },
   { label: '链接', icon: 'i-lucide-link', edit: (text: string) => webLink(text) },
-  { label: '插入图片链接', icon: 'i-lucide-image', edit: (text: string) => webLink(text, true) },
   { label: '代码块', icon: 'i-lucide-code', block: true, edit: (text: string) => wrap(text, '代码', fence + '\n', '\n' + fence) },
 ]
 
@@ -70,7 +71,7 @@ function restoreSelection(selection: readonly [number, number]) {
   editor.value?.setSelectionRange(...selection)
 }
 
-async function insert(command: (typeof commands)[number]) {
+async function insert(command: { edit: (text: string) => Insertion, block?: boolean }) {
   const field = editor.value
   if (!field || props.disabled) return
   const { selectionStart, selectionEnd } = field
@@ -82,39 +83,43 @@ async function insert(command: (typeof commands)[number]) {
   }
 }
 
-function openVideoPicker() {
+function openPicker(nextKind: 'image' | 'video') {
   if (!editor.value || props.disabled) return
-  videoRange.value = { start: editor.value.selectionStart, end: editor.value.selectionEnd }
-  videoId.value = null
+  kind.value = nextKind
+  selectionRange.value = { start: editor.value.selectionStart, end: editor.value.selectionEnd }
+  materialId.value = null
   limitError.value = false
-  videoMounted.value = true
-  videoOpen.value = true
+  pickerMounted.value = true
+  pickerOpen.value = true
 }
 
-function pendingVideo(value: boolean) {
-  videoBusy.value = value
+function pendingMaterial(value: boolean) {
+  pickerBusy.value = value
   emit('busy', value)
 }
 
-function insertVideo() {
-  const range = videoRange.value
-  if (!range || !videoId.value || videoBusy.value || props.disabled) return
-  const content = '@[video](/api/materials/' + videoId.value + ')'
-  const position = content.length
-  const selection = insertAt(range.start, range.end, { content, from: position, to: position }, true)
+function insertMaterial() {
+  const range = selectionRange.value
+  if (!range || !materialId.value || pickerBusy.value || props.disabled) return
+  const url = '/api/materials/' + materialId.value
+  const alt = model.value.slice(range.start, range.end).replace(/[\\\[\]]/g, '\\$&').replace(/\s+/g, ' ').trim() || '图片说明'
+  const content = kind.value === 'image' ? '![' + alt + '](' + url + ')' : '@[video](' + url + ')'
+  const from = kind.value === 'image' ? 2 : content.length
+  const to = kind.value === 'image' ? from + alt.length : content.length
+  const selection = insertAt(range.start, range.end, { content, from, to }, true)
   if (!selection) return
-  focusAfterVideo = selection
-  videoOpen.value = false
+  focusAfterPick = selection
+  pickerOpen.value = false
 }
 
-function afterVideoLeave() {
-  if (videoOpen.value) return
-  videoMounted.value = false
-  videoId.value = null
-  videoRange.value = undefined
-  if (focusAfterVideo) {
-    restoreSelection(focusAfterVideo)
-    focusAfterVideo = undefined
+function afterPickerLeave() {
+  if (pickerOpen.value) return
+  pickerMounted.value = false
+  materialId.value = null
+  selectionRange.value = undefined
+  if (focusAfterPick) {
+    restoreSelection(focusAfterPick)
+    focusAfterPick = undefined
   }
 }
 </script>
@@ -128,8 +133,10 @@ function afterVideoLeave() {
           <UButton v-for="command in commands" :key="command.label" type="button" :icon="command.icon"
             :aria-label="command.label" :title="command.label" color="neutral" variant="ghost" size="sm"
             :disabled="disabled" @click="insert(command)" />
-          <UButton v-if="allowMaterialVideo" type="button" icon="i-lucide-video" aria-label="插入视频" title="插入视频"
-            color="neutral" variant="ghost" size="sm" :disabled="disabled" @click="openVideoPicker" />
+          <UButton type="button" icon="i-lucide-image" aria-label="插入图片" title="插入图片" color="neutral" variant="ghost" size="sm"
+            :disabled="disabled" @click="allowMaterialMedia ? openPicker('image') : insert({ edit: text => webLink(text, true) })" />
+          <UButton v-if="allowMaterialMedia" type="button" icon="i-lucide-video" aria-label="插入视频" title="插入视频"
+            color="neutral" variant="ghost" size="sm" :disabled="disabled" @click="openPicker('video')" />
         </div>
         <div class="markdown-mode" role="group" :aria-label="label + '显示模式'">
           <button type="button" :aria-pressed="!previewing" @click="previewing = false">编辑</button>
@@ -137,29 +144,29 @@ function afterVideoLeave() {
         </div>
       </div>
       <textarea v-show="!previewing" :id="editorId" ref="editor" v-model="model" class="markdown-source"
-        :aria-describedby="allowMaterialVideo ? editorId + '-hint' : undefined" :disabled="disabled" :maxlength="maxlength" rows="8"
+        :aria-describedby="allowMaterialMedia ? editorId + '-hint' : undefined" :disabled="disabled" :maxlength="maxlength" rows="8"
         :placeholder="placeholder" />
       <div v-if="previewing" class="markdown-preview" role="region" :aria-label="label + '预览'" tabindex="0">
-        <RichMarkdown v-if="model.trim()" :source="model" :private-media="allowMaterialVideo" />
+        <RichMarkdown v-if="model.trim()" :source="model" :private-media="allowMaterialMedia" />
         <p v-else class="text-muted text-sm">输入内容后可查看显示效果。</p>
       </div>
     </div>
     <div class="markdown-footnote">
-      <p v-if="allowMaterialVideo" :id="editorId + '-hint'" class="text-muted text-xs">可选择素材库视频，也可另起一行填写 <code>@[video](https://example.com/video.mp4)</code>，支持 MP4、WebM。</p>
+      <p v-if="allowMaterialMedia" :id="editorId + '-hint'" class="text-muted text-xs">图片和视频可从素材库选择，也可另起一行填写 <code>@[video](https://example.com/video.mp4)</code>，支持 MP4、WebM。</p>
       <p v-if="limitError" class="text-error text-xs" role="alert">{{ label }}最多 {{ maxlength }} 字符。</p>
       <span v-else class="text-muted text-xs">{{ model.length }} / {{ maxlength }}</span>
     </div>
-    <ConsoleDialog v-if="allowMaterialVideo" v-model:open="videoOpen" title="选择视频" size="wide" :close="!videoBusy" :dismissible="!videoBusy" @after:leave="afterVideoLeave">
+    <ConsoleDialog v-if="allowMaterialMedia" v-model:open="pickerOpen" :title="'选择' + kindLabel" size="wide" :close="!pickerBusy" :dismissible="!pickerBusy" @after:leave="afterPickerLeave">
       <template #body>
-        <div v-if="videoMounted" class="p-4 sm:p-6">
-          <MaterialBrowser v-model:selected-id="videoId" picker-kind="video" picking @busy="pendingVideo" />
-          <p v-if="limitError" class="feedback error mt-3" role="alert">插入视频后超过活动介绍的字符上限。</p>
+        <div v-if="pickerMounted" class="p-4 sm:p-6">
+          <MaterialBrowser :key="kind" v-model:selected-id="materialId" :picker-kind="kind" picking @busy="pendingMaterial" />
+          <p v-if="limitError" class="feedback error mt-3" role="alert">插入{{ kindLabel }}后超过活动介绍的字符上限。</p>
         </div>
       </template>
       <template #footer>
         <div class="flex w-full justify-end gap-2">
-          <UButton type="button" color="neutral" variant="outline" :disabled="videoBusy" @click="videoOpen = false">取消</UButton>
-          <UButton type="button" :disabled="!videoId || videoBusy" @click="insertVideo">插入视频</UButton>
+          <UButton type="button" color="neutral" variant="outline" :disabled="pickerBusy" @click="pickerOpen = false">取消</UButton>
+          <UButton type="button" :disabled="!materialId || pickerBusy" @click="insertMaterial">插入{{ kindLabel }}</UButton>
         </div>
       </template>
     </ConsoleDialog>

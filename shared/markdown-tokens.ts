@@ -4,9 +4,13 @@ type VideoSource = { materialId: string } | { url: string }
 type VideoToken = Tokens.Generic & { type: 'qm_video', source?: VideoSource }
 export const markdownDepthLimit = 48
 
+export function markdownMaterialId(value: string) {
+  return /^\/api\/materials\/([\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12})$/i.exec(value)?.[1]?.toLowerCase()
+}
+
 function videoSource(value: string): VideoSource | undefined {
-  const local = /^\/api\/materials\/([\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12})$/i.exec(value)
-  if (local?.[1]) return { materialId: local[1].toLowerCase() }
+  const id = markdownMaterialId(value)
+  if (id) return { materialId: id }
   if (!/^https:\/\//i.test(value) || /[\s\u0000-\u001f\u007f-\u009f\\]/u.test(value)) return
   try {
     const address = new URL(value)
@@ -96,21 +100,17 @@ export function markdownQuestions(source: string) {
   }
 }
 
-export function markdownVideoIds(source: string): string[] {
-  if (!source.includes('@[video](')) return []
-  const ids = new Set<string>()
-  const visit = (tokens: Token[], depth: number) => {
-    if (depth >= markdownDepthLimit) return
-    for (const token of tokens) {
-      if (isVideoToken(token) && token.source && 'materialId' in token.source) ids.add(token.source.materialId)
-      const nested = token.type === 'list' ? (token as Tokens.List).items : 'tokens' in token ? token.tokens : undefined
-      if (nested) visit(nested, depth + 1)
-    }
+export function markdownMediaIds(source: string) {
+  const image = new Set<string>()
+  const video = new Set<string>()
+  if (source.includes('/api/materials/')) {
+    markdown.walkTokens(markdownTokens(source), token => {
+      if (isVideoToken(token) && token.source && 'materialId' in token.source) video.add(token.source.materialId)
+      if (token.type === 'image') {
+        const id = markdownMaterialId(token.href)
+        if (id) image.add(id)
+      }
+    })
   }
-  try {
-    visit(markdownTokens(source), 0)
-    return [...ids]
-  } catch {
-    return []
-  }
+  return { image: [...image], video: [...video] }
 }

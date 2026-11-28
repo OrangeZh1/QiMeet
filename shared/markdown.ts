@@ -1,6 +1,6 @@
 import type { MarkedToken, Token } from 'marked'
 import { h, type VNodeChild } from 'vue'
-import { isVideoToken, markdownDepthLimit, markdownTokens } from './markdown-tokens.ts'
+import { isVideoToken, markdownDepthLimit, markdownMaterialId, markdownTokens } from './markdown-tokens.ts'
 const linkSchemes = ['https:', 'http:', 'mailto:', 'tel:']
 
 function safeUrl(value: string, image = false) {
@@ -51,7 +51,8 @@ function renderToken(input: Token, privateMedia: boolean, depth: number): VNodeC
       return href ? h('a', { href, title: token.title || undefined }, content) : content
     }
     case 'image': {
-      const src = safeUrl(token.href, true)
+      const id = privateMedia && markdownMaterialId(token.href)
+      const src = id ? '/api/manage/materials/content?id=' + id : safeUrl(token.href, true)
       return src ? h('img', { src, alt: token.text, title: token.title || undefined, loading: 'lazy', referrerpolicy: 'no-referrer' }) : token.text
     }
     case 'table': return h('div', { class: 'qm-markdown-table' }, [

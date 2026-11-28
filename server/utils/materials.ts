@@ -44,17 +44,17 @@ export async function deleteMaterial(id: string) {
   if (!uuidPattern.test(id)) fail(404, '找不到该素材')
   await transaction(async (db) => {
     if (!await first('SELECT id FROM materials WHERE id=? FOR UPDATE', [id], db)) fail(404, '找不到该素材')
-    const used = await first<{ cover: number, avatar: number, video: number, site: number }>(
+    const used = await first<{ cover: number, avatar: number, intro: number, site: number }>(
       'SELECT (EXISTS (SELECT 1 FROM events WHERE cover_material_id=?) OR EXISTS (SELECT 1 FROM event_covers WHERE material_id=?)) AS cover, ' +
       'EXISTS (SELECT 1 FROM admin_account WHERE avatar_material_id=?) AS avatar, ' +
-      'EXISTS (SELECT 1 FROM event_videos WHERE material_id=?) AS video, ' +
+      'EXISTS (SELECT 1 FROM event_videos WHERE material_id=?) AS intro, ' +
       '(EXISTS (SELECT 1 FROM site_settings WHERE ? IN (favicon_material_id,logo_material_id,login_image_material_id)) ' +
       'OR EXISTS (SELECT 1 FROM site_home_banners WHERE material_id=?)) AS site',
       [id, id, id, id, id, id], db,
     )
     if (used?.cover) fail(409, '该图片已用作活动封面（含回收站中的活动），请先解除引用。')
     if (used?.avatar) fail(409, '该图片已用作管理员头像，请先更换头像。')
-    if (used?.video) fail(409, '该视频已用于活动介绍（含回收站中的活动），请先解除引用。')
+    if (used?.intro) fail(409, '该素材已用于活动介绍（含回收站中的活动），请先解除引用。')
     if (used?.site) fail(409, '该图片已用作站点素材，请先在站点设置中更换。')
     try {
       await mutate('DELETE FROM materials WHERE id=?', [id], db)
@@ -95,7 +95,7 @@ export async function materialContent(event: RequestEvent, id: string, published
       ? " AND ((m.kind='image' AND (EXISTS (SELECT 1 FROM events e WHERE e.cover_material_id=m.id AND e.published=1 AND e.deleted_at IS NULL)" +
         ' OR EXISTS (SELECT 1 FROM event_covers c JOIN events e ON e.id=c.event_id WHERE c.material_id=m.id AND e.published=1 AND e.deleted_at IS NULL)' +
         ' OR EXISTS (SELECT 1 FROM site_home_banners WHERE material_id=m.id)))' +
-        " OR (m.kind='video' AND EXISTS (SELECT 1 FROM event_videos v JOIN events e ON e.id=v.event_id WHERE v.material_id=m.id AND e.published=1 AND e.deleted_at IS NULL)))"
+        " OR (m.kind IN ('image','video') AND EXISTS (SELECT 1 FROM event_videos v JOIN events e ON e.id=v.event_id WHERE v.material_id=m.id AND e.published=1 AND e.deleted_at IS NULL)))"
       : ''),
     preview ? [preview, id] : [id],
   )

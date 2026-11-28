@@ -173,11 +173,11 @@ async function save() {
       <template v-else>
         <section id="site-terms" class="settings-section form-stack" aria-label="用户协议">
           <ActivityMarkdownEditor v-model="input.userAgreement" label="用户协议" placeholder="输入用户协议内容" :maxlength="30000"
-            :allow-material-video="false" :disabled="saving" />
+            :allow-material-media="false" :disabled="saving" />
         </section>
         <section id="site-privacy" class="settings-section form-stack" aria-label="隐私政策">
           <ActivityMarkdownEditor v-model="input.privacyPolicy" label="隐私政策" placeholder="输入隐私政策内容" :maxlength="30000"
-            :allow-material-video="false" :disabled="saving" />
+            :allow-material-media="false" :disabled="saving" />
         </section>
       </template>
       <footer class="panel-toolbar settings-actions">

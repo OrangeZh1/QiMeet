@@ -4,7 +4,7 @@ import { createSSRApp, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { createPasswordHash, signInAdmin } from '../server/utils/security.ts'
 import { markdownNodes } from '../shared/markdown.ts'
-import { markdownParts, markdownQuestions } from '../shared/markdown-tokens.ts'
+import { markdownMediaIds, markdownParts, markdownQuestions } from '../shared/markdown-tokens.ts'
 import { detectAttendeeContact, scannedCheckInPath } from '../shared/attendee-account.ts'
 
 test('扫码只打开本站的活动签到链接', () => {
@@ -25,6 +25,22 @@ test('统一账号输入识别中国大陆手机号和邮箱，并拒绝无法�
   })
   for (const invalid of ['', '1390000000', '+1 13900000000', '13900000000@', 'name@example', '橙子']) {
     assert.equal(detectAttendeeContact(invalid), undefined)
+  }
+})
+
+test('活动介绍选用的素材在后台和公开页使用对应的图片地址', async () => {
+  const image = '00000000-0000-4000-8000-000000000001'
+  const video = '00000000-0000-4000-8000-000000000002'
+  const unused = '00000000-0000-4000-8000-000000000003'
+  const url = '/api/materials/' + image
+  const source = ['| 海报 |', '| --- |', '| ![入场图][poster] |', '', '[poster]: ' + url, '',
+    '![](' + url + ')', '', '@[video](/api/materials/' + video + ')', '', '`![](/api/materials/' + unused + ')`'].join('\n')
+  assert.deepEqual(markdownMediaIds(source), { image: [image], video: [video] })
+  for (const privateMedia of [true, false]) {
+    const html = await renderToString(createSSRApp({ render: () => h('div', markdownNodes(source, privateMedia)) }))
+    const prefix = privateMedia ? '/api/manage/materials/content?id=' : '/api/materials/'
+    assert.ok(html.includes('<img src="' + prefix + image + '" alt="入场图"'))
+    assert.ok(html.includes('<video src="' + prefix + video + '"'))
   }
 })
 

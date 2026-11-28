@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type { PoolConnection } from 'mysql2/promise'
 import type { AdminEvent, FormVersion } from '#shared/models'
-import { markdownVideoIds } from '#shared/markdown-tokens'
+import { markdownMediaIds } from '#shared/markdown-tokens'
 import { checkinSourceLabels, displayDate, isContentField, isFileField, registrantDefaultPageSize, registrantPageSizes, registrationContactField } from '#shared/models'
 
 function coverInput(input: Record<string, unknown>): string[] | undefined {
@@ -21,12 +21,16 @@ async function replaceCovers(db: PoolConnection, eventId: number, ids: string[])
   )
 }
 
-async function replaceActivityVideos(db: PoolConnection, eventId: number, ids: string[]) {
-  if (ids.length) {
+async function replaceActivityMedia(db: PoolConnection, eventId: number, media: ReturnType<typeof markdownMediaIds>) {
+  for (const kind of ['image', 'video'] as const) {
+    const ids = media[kind]
+    if (!ids.length) continue
     const placeholders = ids.map(() => '?').join(',')
-    const matched = await rows<{ id: string }>("SELECT id FROM materials WHERE kind='video' AND id IN (" + placeholders + ')', ids, db)
-    if (matched.length !== ids.length) fail(404, '活动介绍引用的视频素材不存在，请重新选择。')
+    const matched = await rows<{ id: string }>('SELECT id FROM materials WHERE kind=? AND id IN (' + placeholders + ')', [kind, ...ids], db)
+    if (matched.length !== ids.length) fail(404, '活动介绍引用的素材不存在或类型不符，请重新选择。')
   }
+  // The existing link table holds material IDs and uses the materials table for their kind.
+  const ids = [...media.image, ...media.video]
   await mutate('DELETE FROM event_videos WHERE event_id=?', [eventId], db)
   if (ids.length) await mutate(
     'INSERT INTO event_videos (event_id,material_id) VALUES ' + ids.map(() => '(?,?)').join(','),
@@ -40,7 +44,7 @@ export async function saveConference(id: number | undefined, input: Record<strin
   const venue = text(input.venue, 200, '会场地点', false)
   const covers = coverInput(input)
   const description = text(input.description, 12000, '活动介绍', false)
-  const videos = markdownVideoIds(description)
+  const media = markdownMediaIds(description)
   const eventRange = interval(input.startsAt, input.endsAt, '活动')
   const registrationRange = interval(input.registrationStartsAt, input.registrationEndsAt, '报名')
   const editPolicy = oneOf(input.editPolicy, ['off', 'once', 'unlimited'], '二次修改规则')
@@ -57,7 +61,7 @@ export async function saveConference(id: number | undefined, input: Record<strin
       await mutate('UPDATE events SET title=?,organizer=?,venue=?,description=?,starts_at=?,ends_at=?,registration_starts_at=?,registration_ends_at=?,edit_policy=?,edit_deadline=?,registration_sms=?' + coverColumns + ' WHERE id=?',
         [...details, ...timing, registrationSms ?? current.registrationSms, ...(covers === undefined ? [] : [covers[0] ?? null]), id], db)
       if (covers !== undefined) await replaceCovers(db, id, covers)
-      await replaceActivityVideos(db, id, videos)
+      await replaceActivityMedia(db, id, media)
       return id
     }
     const provided = text(input.slug, 64, '活动链接', false)
@@ -74,7 +78,7 @@ export async function saveConference(id: number | undefined, input: Record<strin
       throw error
     }
     if (covers?.length) await replaceCovers(db, result.insertId, covers)
-    if (videos.length) await replaceActivityVideos(db, result.insertId, videos)
+    if (media.image.length || media.video.length) await replaceActivityMedia(db, result.insertId, media)
     await mutate('INSERT INTO form_versions (event_id,version,fields,legacy_contact) VALUES (?,1,JSON_ARRAY(),FALSE)', [result.insertId], db)
     await mutate("INSERT INTO checkpoints (event_id,title,starts_at,ends_at) VALUES (?,'主会场签到',?,?)", [result.insertId, ...eventRange], db)
     return result.insertId
