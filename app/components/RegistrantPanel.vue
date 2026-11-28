@@ -3,9 +3,9 @@ import ConsoleDataTable from '#qiandao-console/ConsoleDataTable.vue'
 import ConsoleListPagination from './console/ConsoleListPagination.vue'
 import ConsoleDialog from './material/ConsoleDialog.vue'
 import type { AdminEvent, Registration, RegistrantRow } from '#shared/models'
-import { displayDate, isContentField, registrationContactField } from '#shared/models'
+import { displayDate, isContentField, registrantDefaultPageSize, registrantPageSizes, registrationContactField } from '#shared/models'
 
-type List = { total: number, rows: RegistrantRow[] }
+type List = { total: number, page: number, pageSize: number, rows: RegistrantRow[] }
 type AuditEntry = { id: number, version: number, rowCount: number, createdAt: string }
 const props = defineProps<{ event: AdminEvent }>()
 const emit = defineEmits<{ countsChanged: [] }>()
@@ -19,36 +19,36 @@ const request = useRequestFetch()
 const { data: starting, error: initialError } = await useAsyncData('roster-' + eventId,
   () => request<List>('/api/manage/registrants', { query: { eventId } }),
 )
-const result = ref(starting.value || { total: 0, rows: [] })
+const result = ref(starting.value || { total: 0, page: 1, pageSize: registrantDefaultPageSize, rows: [] })
 const columns = [
+  { id: 'sequence', header: '序号' },
   { accessorKey: 'name', header: '姓名' }, { accessorKey: 'phone', header: '手机号' },
   { accessorKey: 'version', header: '表单版本' }, { accessorKey: 'createdAt', header: '报名时间' },
   { id: 'checkins', header: '签到' }, { id: 'actions', header: '操作' },
 ]
-type ListAction = 'search' | 'reset' | 'previous' | 'next'
+type ListAction = 'search' | 'reset' | 'previous' | 'next' | 'size'
 const selected = reactive({ q: '', checkpointId: 0, status: 'all' })
 const applied = ref({ ...selected })
-const busy = reactive({ search: false, reset: false, previous: false, next: false })
-const paging = computed(() => busy.previous ? 'previous' : busy.next ? 'next' : undefined)
-const page = ref(1)
-const pages = computed(() => Math.max(1, Math.ceil(result.value.total / 15)))
+const busy = reactive({ search: false, reset: false, previous: false, next: false, size: false })
+const paging = computed(() => busy.size ? 'size' : busy.previous ? 'previous' : busy.next ? 'next' : undefined)
+const page = computed(() => result.value.page)
+const pageSize = computed(() => result.value.pageSize)
+const sizeOptions = registrantPageSizes.map(value => ({ label: value + ' 条/页', value }))
+const pages = computed(() => Math.max(1, Math.ceil(result.value.total / pageSize.value)))
 const currentPoint = computed(() => props.event.checkpoints.find(point => point.id === applied.value.checkpointId))
 const error = ref(initialError.value ? errorText(initialError.value) : '')
 const notice = ref('')
 let loadSequence = 0
-async function load(action?: ListAction, next = page.value) {
+async function load(action?: ListAction, next = page.value, size = pageSize.value) {
   const serial = ++loadSequence
   if (action) busy[action] = true
   error.value = ''
   try {
     const list = await manageRequest<List>('registrants', { query: {
-      eventId, page: next, q: applied.value.q || undefined,
+      eventId, page: next, pageSize: size, q: applied.value.q || undefined,
       checkpointId: applied.value.checkpointId || undefined, status: applied.value.status,
     } })
-    if (serial === loadSequence) {
-      result.value = list
-      page.value = next
-    }
+    if (serial === loadSequence) result.value = list
   } catch (cause) {
     if (serial === loadSequence) error.value = errorText(cause)
   } finally {
@@ -215,6 +215,7 @@ const tableRows = computed(() => result.value.rows as unknown as Record<string, 
       <p v-if="error || notice" class="feedback panel-message" :class="{ error }" :role="error ? 'alert' : 'status'">{{ error || notice }}</p>
       <div class="table-scroll list-table">
         <ConsoleDataTable :data="tableRows" :columns="columns" :show-sequence="false" :client-pagination="false" empty-title="暂无匹配的报名">
+          <template #sequence-cell="{ row }">{{ (page - 1) * pageSize + row.index + 1 }}</template>
           <template #name-cell="{ row }">{{ registrationName(row.original) }}</template>
           <template #phone-cell="{ row }">{{ row.original.phone || '—' }}</template>
           <template #version-cell="{ row }">V{{ row.original.version }}</template>
@@ -233,7 +234,8 @@ const tableRows = computed(() => result.value.rows as unknown as Record<string, 
         </ConsoleDataTable>
       </div>
       <ConsoleListPagination label="报名名单" :count="'共 ' + result.total + ' 条报名'" :page="page" :pages="pages"
-        :pending="paging" :disabled="busy.search || busy.reset" @turn="load($event, page + ($event === 'next' ? 1 : -1))" />
+        :page-size="pageSize" :size-options="sizeOptions" :pending="paging" :disabled="busy.search || busy.reset"
+        @resize="load('size', 1, $event)" @turn="load($event, page + ($event === 'next' ? 1 : -1))" />
     </section>
     <form v-if="manual" class="panel panel-content form-stack reveal-panel" @submit.prevent="submitManual">
       <h2 class="section-title">人工补签 · {{ registrationName(manual) }}</h2>

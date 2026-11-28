@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import type { PoolConnection } from 'mysql2/promise'
 import type { AdminEvent, FormVersion } from '#shared/models'
 import { markdownVideoIds } from '#shared/markdown-tokens'
-import { checkinSourceLabels, displayDate, isContentField, isFileField, registrationContactField } from '#shared/models'
+import { checkinSourceLabels, displayDate, isContentField, isFileField, registrantDefaultPageSize, registrantPageSizes, registrationContactField } from '#shared/models'
 
 function coverInput(input: Record<string, unknown>): string[] | undefined {
   if (input.coverMaterialIds === undefined && input.coverMaterialId === undefined) return undefined
@@ -140,7 +140,9 @@ function rosterContactColumn(forms: FormVersion[], role: 'name' | 'phone') {
 export async function listRegistrations(eventId: number, query: Record<string, unknown>) {
   await conferenceById(eventId)
   const term = text(query.q, 120, '搜索条件', false)
-  const page = query.page === undefined ? 1 : positive(query.page)
+  const requestedPage = query.page === undefined ? 1 : positive(query.page)
+  const pageSize = query.pageSize === undefined ? registrantDefaultPageSize : positive(query.pageSize)
+  if (!registrantPageSizes.some(size => size === pageSize)) fail(400, '每页条数有误')
   const pointId = query.checkpointId ? positive(query.checkpointId) : null
   const status = oneOf(query.status || 'all', ['all', 'checked', 'pending'], '签到状态')
   if (pointId) await checkpointFor(eventId, pointId)
@@ -158,15 +160,15 @@ export async function listRegistrations(eventId: number, query: Record<string, u
     if (pointId) args.push(pointId)
   }
   const condition = ' FROM registrations r JOIN form_versions f ON f.id=r.form_id WHERE ' + where.join(' AND ')
-  const [results, count] = await Promise.all([
-    rows<{ id: number, name: string | null, phone: string | null, createdAt: string, version: number, edits: number }>(
-      `SELECT r.id,${rosterName.sql} AS name,${rosterPhone.sql} AS phone,r.created_at AS createdAt,r.edits,f.version` + condition + ' ORDER BY r.id DESC LIMIT 15 OFFSET ?',
-      [...rosterName.args, ...rosterPhone.args, ...args, (page - 1) * 15],
-    ),
-    first<{ total: number }>('SELECT COUNT(*) AS total' + condition, args),
-  ])
+  const count = await first<{ total: number }>('SELECT COUNT(*) AS total' + condition, args)
+  const total = count!.total
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)))
+  const results = await rows<{ id: number, name: string | null, phone: string | null, createdAt: string, version: number, edits: number }>(
+    `SELECT r.id,${rosterName.sql} AS name,${rosterPhone.sql} AS phone,r.created_at AS createdAt,r.edits,f.version` + condition + ' ORDER BY r.id DESC LIMIT ? OFFSET ?',
+    [...rosterName.args, ...rosterPhone.args, ...args, String(pageSize), String((page - 1) * pageSize)],
+  )
   const attendance = await attendanceFor(eventId, results.map(row => row.id))
-  return { total: count!.total, rows: results.map(row => ({ ...row, createdAt: iso(row.createdAt), attendance: attendance.get(row.id) || [] })) }
+  return { total, page, pageSize, rows: results.map(row => ({ ...row, createdAt: iso(row.createdAt), attendance: attendance.get(row.id) || [] })) }
 }
 
 function csvCell(value: unknown) {
